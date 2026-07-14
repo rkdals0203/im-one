@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사내 지출결의/관리 시스템 (데모)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 text-sm">
+
+    <div class="flex h-screen overflow-hidden">
+        <aside class="w-64 bg-slate-800 text-slate-200 flex flex-col justify-between shrink-0">
+            <div>
+                <div class="p-5 text-lg font-bold border-b border-slate-700 flex items-center gap-2 bg-slate-900">
+                    <span class="text-blue-400">📊</span> ERP 지출관리 시스템
+                </div>
+                <nav class="p-4 space-y-1">
+                    <button onclick="switchTab('input-tab')" id="btn-input-tab" class="w-full text-left px-4 py-2.5 rounded font-medium bg-blue-600 text-white">
+                        1. 지출결의 입력
+                    </button>
+                    <button onclick="switchTab('approve-tab')" id="btn-approve-tab" class="w-full text-left px-4 py-2.5 rounded font-medium text-slate-400 hover:bg-slate-700 hover:text-white transition">
+                        4. 지출품의 승인 (부서장)
+                    </button>
+                    <button onclick="switchTab('status-tab')" id="btn-status-tab" class="w-full text-left px-4 py-2.5 rounded font-medium text-slate-400 hover:bg-slate-700 hover:text-white transition">
+                        5. 승인현황 / 6. 예산내역
+                    </button>
+                </nav>
+            </div>
+            <div class="p-4 bg-slate-900 text-xs text-slate-400 border-t border-slate-700 space-y-1">
+                <div>품의부서: <strong class="text-white">C30 IT정보팀</strong></div>
+                <div>로그인: <strong class="text-white">박수민 대리 (970305)</strong></div>
+                <button onclick="resetTestData()" class="mt-2 w-full text-left text-red-300 hover:text-red-200 hover:underline">🗑 테스트 데이터 초기화</button>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col overflow-hidden">
+
+            <div class="bg-amber-50 border-b border-amber-200 px-6 py-2 flex items-center text-xs text-amber-800 font-medium">
+                <div>📌 [업무 지침] 월·수·금만 지출처리 가능 (단, 23일은 지출처리 불가) / 처리 전 [5527] 예산 잔액 확인 필수</div>
+            </div>
+
+            <div class="flex-1 p-6 overflow-y-auto">
+
+                <div id="input-tab" class="tab-content space-y-6">
+                    <div class="flex justify-between items-center border-b border-slate-300 pb-3">
+                        <h2 class="text-xl font-bold text-slate-900">[5221] 지출품의 입력</h2>
+                        <span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded">품의번호: 자동발번</span>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-lg shadow-xs border border-slate-200 grid grid-cols-4 gap-4 bg-slate-50/50">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">품의부서</label>
+                            <select id="deptCode" onchange="renderDeptCardList()" class="w-full border border-slate-300 rounded px-2 py-1.5 bg-white font-medium">
+                                <option value="C23 IT기획(예산)">C23 IT기획(예산)</option>
+                                <option value="C30 IT정보팀" selected>C30 IT정보팀</option>
+                                <option value="C26 IT금융상품부">C26 IT금융상품부</option>
+                                <option value="C21 IT인프라부">C21 IT인프라부</option>
+                                <option value="C25 디지털전략부">C25 디지털전략부</option>
+                                <option value="C28 정보보안부">C28 정보보안부</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">품의일자 / 지급일자</label>
+                            <input type="date" id="docDate" onchange="validateDocDate()" class="w-full border border-slate-300 rounded px-2 py-1.5 focus:ring-1 focus:ring-blue-500">
+                            <div id="docDateWarning" class="hidden text-xs text-red-600 font-semibold mt-1">⚠ 월·수·금만 처리 가능하며, 23일은 지출처리 불가합니다.</div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">증빙구분</label>
+                            <select id="evidenceType" onchange="toggleCardSection()" class="w-full border border-slate-300 rounded px-2 py-1.5 bg-white">
+                                <option value="3.법인카드">3. 법인카드 (사용내역 선택)</option>
+                                <option value="0.일반영수증">0. 일반영수증 (전화료 등)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">격지지점</label>
+                            <input type="text" id="branchCode" value="010 본지점" class="w-full border border-slate-300 rounded px-2 py-1.5 font-mono">
+                        </div>
+                    </div>
+
+                    <div id="dept-card-list-section" class="bg-white p-4 rounded-lg shadow-xs border border-slate-200 space-y-2">
+                        <h3 class="font-bold text-slate-900 text-sm flex items-center gap-1">
+                            <span class="text-blue-500">💳</span> 1-1. 부서 보유 법인카드 목록
+                        </h3>
+                        <div id="deptCardList" class="grid grid-cols-3 gap-2 text-xs"></div>
+                    </div>
+
+                    <div id="card-select-section" class="bg-white p-4 rounded-lg shadow-xs border border-slate-200 space-y-3">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-slate-900 text-sm flex items-center gap-1">
+                                <span class="text-blue-500">💳</span> 2. 법인카드 사용내역 조회
+                            </h3>
+                            <span id="cardNumberLabel" class="text-xs text-slate-400">카드를 선택해 주세요</span>
+                        </div>
+
+                        <div class="border border-slate-200 rounded overflow-hidden max-h-40 overflow-y-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-100 border-b border-slate-200 font-semibold text-slate-600 sticky top-0">
+                                    <tr>
+                                        <th class="p-2 text-center w-10">선택</th>
+                                        <th class="p-2">승인일</th>
+                                        <th class="p-2">가맹점명</th>
+                                        <th class="p-2 text-right">승인금액</th>
+                                        <th class="p-2 text-center">매입여부</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cardUsageTableBody" class="divide-y divide-slate-100 font-mono">
+                                    <tr><td colspan="5" class="p-4 text-center text-slate-400">위에서 카드를 선택하면 사용내역이 표시됩니다.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div id="recommend-section" class="hidden text-xs bg-indigo-50 border border-indigo-200 rounded p-3 text-indigo-800 leading-relaxed"></div>
+
+                        <div id="meeting-minutes-upload" class="hidden bg-amber-50 border border-amber-200 rounded p-3 space-y-1">
+                            <label class="block text-xs font-semibold text-amber-800">⚠ 10만원 이상 회의비 - 회의록 PDF 업로드 (필수)</label>
+                            <input type="file" id="meetingMinutesFile" accept="application/pdf" class="w-full text-xs">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6">
+                        <div class="bg-white p-4 rounded-lg shadow-xs border border-emerald-200">
+                            <div class="text-xs font-bold text-emerald-700 uppercase mb-2">차변 (정산 비용 과목)</div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <select id="drAccount" class="col-span-2 border border-slate-300 rounded px-2 py-1 bg-white">
+                                    <option value="08WA 본사 업무추진비">08WA 본사 업무추진비</option>
+                                    <option value="40AA 본사 회의비">40AA 본사 회의비</option>
+                                    <option value="45BC 본사 조직활성화비">45BC 본사 조직활성화비</option>
+                                    <option value="12CC (일반)전화료">12CC (일반)전화료</option>
+                                    <option value="20DD 교통비">20DD 교통비</option>
+                                </select>
+                                <input type="number" id="drAmount" placeholder="금액" class="border border-slate-300 rounded px-2 py-1 text-right font-mono font-semibold">
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow-xs border border-amber-200">
+                            <div class="text-xs font-bold text-amber-700 uppercase mb-2">대변 (지급 방식 결정을 위한 내부 계정)</div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <select id="crAccount" class="col-span-2 border border-slate-300 rounded px-2 py-1 bg-white" disabled>
+                                    <option id="crAccountOpt" value="미지급비용">미지급비용 (카드 결제건)</option>
+                                </select>
+                                <input type="number" id="crAmount" placeholder="금액" disabled class="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-right font-mono font-semibold">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-lg shadow-xs border border-slate-200 space-y-4">
+                        <div class="grid grid-cols-3 gap-4">
+                            <div class="col-span-2">
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">적요 (상세 내역 기재)</label>
+                                <input type="text" id="docSummary" class="w-full border border-slate-300 rounded px-2 py-1.5">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">지급처 / 수신자</label>
+                                <input type="text" id="payee" placeholder="사번 또는 가맹점" class="w-full border border-slate-300 rounded px-2 py-1.5">
+                            </div>
+                        </div>
+
+                        <button onclick="submitForm()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded shadow-sm transition cursor-pointer text-center">
+                            🚀 지출 결의서 전송 (품의 등록)
+                        </button>
+                    </div>
+                </div>
+
+
+                <div id="approve-tab" class="tab-content space-y-6 hidden">
+                    <div class="flex justify-between items-center border-b border-slate-300 pb-3">
+                        <h2 class="text-xl font-bold text-slate-900">[5232] 지출품의 승인 (미승인 -> 승인)</h2>
+                        <span class="text-xs text-slate-500">결재 권한자: IT기획 파트장/부서장</span>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-xs border border-slate-200 overflow-hidden">
+                        <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                            <span class="font-semibold text-slate-700">결재 대기 문서 목록</span>
+                            <span class="text-xs text-blue-600 font-medium">* 시연을 위해 체크 후 상단 [승인] 버튼을 누르면 즉시 결재 처리됩니다.</span>
+                        </div>
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+                                <tr>
+                                    <th class="p-3 text-center w-12"><input type="checkbox" id="th-all-check" onchange="toggleAllApprovals(this)"></th>
+                                    <th class="p-3">부서명</th>
+                                    <th class="p-3">품의일</th>
+                                    <th class="p-3">세절명 (내역)</th>
+                                    <th class="p-3 text-right">품의금액</th>
+                                    <th class="p-3 text-center">결재</th>
+                                    <th class="p-3 text-center">전표번호</th>
+                                </tr>
+                            </thead>
+                            <tbody id="approvalTableBody" class="divide-y divide-slate-200 font-mono">
+                                </tbody>
+                        </table>
+                        <div class="p-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                            <button onclick="cancelApproval()" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold px-4 py-2 rounded text-xs transition cursor-pointer">
+                                선택 항목 승인취소
+                            </button>
+                            <button onclick="processApproval()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded text-xs transition cursor-pointer">
+                                선택 항목 일괄 승인 완료
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div id="status-tab" class="tab-content space-y-6 hidden">
+                    <div class="space-y-3">
+                        <h2 class="text-xl font-bold text-slate-900">[5307] 지출결의서 승인현황 (재무부 미승인시 전표)</h2>
+                        <div class="bg-white p-5 rounded-lg shadow-xs border border-slate-200">
+                            <div class="text-center font-bold text-lg mb-4 tracking-widest border-b pb-2 text-slate-700">지출결의서 승인현황 리포트</div>
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-50 border-y border-slate-300 font-semibold text-slate-600">
+                                    <tr>
+                                        <th class="p-2">번호</th>
+                                        <th class="p-2">결의일자</th>
+                                        <th class="p-2">세절명(적요)</th>
+                                        <th class="p-2 text-right">금액</th>
+                                        <th class="p-2">계정과목</th>
+                                        <th class="p-2 text-center">결재상태</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="statusTableBody" class="divide-y divide-slate-200 font-mono">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <h2 class="text-xl font-bold text-slate-900">[5527] 예산사용내역 실적 검토 (적요별 배정/사용/잔액)</h2>
+                        <div class="bg-white rounded-lg shadow-xs border border-slate-200 overflow-hidden">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+                                    <tr>
+                                        <th class="p-3">예산코드</th>
+                                        <th class="p-3">적요</th>
+                                        <th class="p-3 text-right">초기배정액</th>
+                                        <th class="p-3 text-right">사용금액</th>
+                                        <th class="p-3 text-right">예산 잔액</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="budgetTableBody" class="divide-y divide-slate-100 font-mono">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- AI 지출결의 챗봇: 가상 카드결제를 감지해 아래 <script>의 실제 데이터(BUDGET_CODES/DEPT_CARDS/dataset)와
+         실제 업무 로직(randomUsageForCard/회의비 판정/buildLedgerEntries 예산분기)을 그대로 재사용해 품의를 상신한다. -->
+    <div id="chatbot-container" class="fixed bottom-5 right-5 w-[420px] h-[500px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 font-sans text-sm">
+        <div class="bg-indigo-600 text-white p-4 rounded-t-2xl flex justify-between items-center shadow-sm">
+            <div class="flex items-center gap-2 shrink-0">
+                <span class="flex h-2 w-2 relative shrink-0">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                <strong class="font-semibold text-base whitespace-nowrap">🤖 AI 지출결의 에이전트</strong>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+                <button onclick="triggerVirtualCardUsage()" title="가상 카드결제 발생시키기" class="bg-indigo-700 hover:bg-indigo-800 text-sm w-7 h-7 rounded transition-colors leading-none shrink-0">
+                    💳
+                </button>
+                <button onclick="toggleChatbot(false)" title="챗봇 숨기기" class="bg-indigo-700 hover:bg-indigo-800 text-xs w-7 h-7 rounded transition-colors leading-none shrink-0">
+                    ─
+                </button>
+            </div>
+        </div>
+
+        <div id="chatbot-messages" class="flex-1 p-4 overflow-y-auto bg-slate-50 flex flex-col gap-3">
+            <div class="bg-white border border-slate-200 text-slate-700 p-3 rounded-2xl rounded-tl-none max-w-[85%] shadow-sm">
+                안녕하세요! 법인카드 결제 내역이 감지되면 자동으로 품의 작성을 도와드려요. 상단의 <strong>💳 버튼</strong>을 누르거나, <strong>"1월 5일 19:15 스타벅스 88000원 품의해줘"</strong>처럼 날짜·시간·상호명·금액을 함께 채팅으로 요청해 보세요! (같은 가맹점 방문이 여러 건이면 조건을 더 구체적으로 입력해야 정확히 특정됩니다)<br><br>추천된 적요가 마음에 안 들면 <strong>"회의비로 바꿔줘"</strong>처럼 말씀해주시고, <strong>"예산 얼마 남았어?"</strong>처럼 물어보시면 예산 잔액도 알려드려요.<br><br>결재 대기 중인 품의 건은 <strong>"1001번 승인해줘"</strong>나 <strong>"IT정보팀 미승인 건 전체 취소해줘"</strong>처럼 요청하시면 처리해드려요.
+            </div>
+        </div>
+
+        <div class="p-3 bg-white border-t border-slate-100 flex gap-2 rounded-b-2xl">
+            <input type="text" id="chatbot-input" onkeyup="if(event.key==='Enter') sendChatMessage()" placeholder="예: 1월 5일 19:15 스타벅스 88000원 품의해줘 / 김철수, 이영희 / 3분기 마케팅 전략 회의" class="flex-1 border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500">
+            <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium transition-colors">전송</button>
+        </div>
+    </div>
+
+    <button id="chatbot-launcher" onclick="toggleChatbot(true)" class="hidden fixed bottom-5 right-5 w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white text-2xl rounded-full shadow-2xl z-50 items-center justify-center">
+        🤖
+    </button>
+
+    <script>
+        function toggleChatbot(show) {
+            const container = document.getElementById('chatbot-container');
+            const launcher = document.getElementById('chatbot-launcher');
+            if (show) {
+                container.classList.remove('hidden');
+                launcher.classList.remove('flex');
+                launcher.classList.add('hidden');
+            } else {
+                container.classList.add('hidden');
+                launcher.classList.remove('hidden');
+                launcher.classList.add('flex');
+            }
+        }
+    </script>
+
+    <script>
+        // 적요별 예산 코드 (배정액은 데모용 임의값)
+        const BUDGET_CODES = [
+            { value: "08WA 본사 업무추진비", code: "08WA", name: "본사 업무추진비", allocated: 2000000 },
+            { value: "40AA 본사 회의비", code: "40AA", name: "본사 회의비", allocated: 1200000 },
+            { value: "45BC 본사 조직활성화비", code: "45BC", name: "본사 조직활성화비", allocated: 800000 },
+            { value: "12CC (일반)전화료", code: "12CC", name: "(일반)전화료", allocated: 500000 },
+            { value: "20DD 교통비", code: "20DD", name: "교통비", allocated: 1500000 }
+        ];
+
+        // 초기 상태: 샘플 데이터 없이 빈 상태로 시작 (품의 등록/챗봇 상신으로 생성된 건만 표시)
+        const DATASET_STORAGE_KEY = 'expenseDemoDataset';
+        const DEFAULT_DATASET = [];
+
+        // 새로고침해도 승인 처리 결과 등이 유지되도록 localStorage에 저장된 값이 있으면 그걸 우선 사용
+        function loadDataset() {
+            try {
+                const saved = localStorage.getItem(DATASET_STORAGE_KEY);
+                if(saved) return JSON.parse(saved);
+            } catch(e) {}
+            return DEFAULT_DATASET.map(d => ({ ...d }));
+        }
+
+        function saveDataset() {
+            localStorage.setItem(DATASET_STORAGE_KEY, JSON.stringify(dataset));
+        }
+
+        // 개발자도구 없이 저장된 테스트 데이터를 지우기 위한 버튼용 함수
+        function resetTestData() {
+            if(!confirm("저장된 모든 테스트 데이터(품의/승인 내역 + 카드 사용내역)를 초기화할까요?")) return;
+            localStorage.removeItem(DATASET_STORAGE_KEY);
+            localStorage.removeItem(CARD_USAGE_STORAGE_KEY);
+            localStorage.removeItem(USED_CARD_USAGE_KEY);
+            location.reload();
+        }
+
+        let dataset = loadDataset();
+
+        // 초기 세팅
+        // 품의일자 기본값 = 실제 오늘 날짜 (로컬 타임존 기준)
+        (function setDefaultDocDate() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            document.getElementById('docDate').value = `${yyyy}-${mm}-${dd}`;
+        })();
+
+        // 부서별 보유 법인카드 목록
+        const DEPT_CARDS = {
+            "C23 IT기획(예산)": [
+                { number: "5585-3176-0945-5522", holder: "김윤석" }
+            ],
+            "C30 IT정보팀": [
+                { number: "4521-8890-1123-7765", holder: "김민준" },
+                { number: "4521-8890-1123-9981", holder: "박서연" }
+            ],
+            "C26 IT금융상품부": [
+                { number: "9012-4456-7789-3345", holder: "최민재" }
+            ],
+            "C21 IT인프라부": [
+                { number: "3345-6678-9012-5567", holder: "정다은" },
+                { number: "3345-6678-9012-8843", holder: "한지훈" }
+            ],
+            "C25 디지털전략부": [
+                { number: "7788-2233-5566-9910", holder: "오세훈" }
+            ],
+            "C28 정보보안부": [
+                { number: "6654-3321-8877-4409", holder: "윤아름" }
+            ]
+        };
+
+        // 랜덤 사용내역 생성용 가맹점 풀 (여의도/기타 지역 혼합)
+        const STORE_POOL = [
+            { name: "동동국수 여의도점", location: "여의도" },
+            { name: "쿠사 (일식)", location: "기타" },
+            { name: "(주)공영식품 기소야 여의도점", location: "여의도" },
+            { name: "스타벅스 여의도한국거래소점", location: "여의도" },
+            { name: "교촌치킨 강남역점", location: "기타" },
+            { name: "본죽&비빔밥 여의도점", location: "여의도" },
+            { name: "김밥천국 마포공덕점", location: "기타" },
+            { name: "CU 여의도IFC점", location: "여의도" },
+            { name: "파리바게뜨 목동점", location: "기타" },
+            { name: "놀부부대찌개 여의도점", location: "여의도" }
+        ];
+
+        // 카드별 랜덤 사용내역 생성 (동일 카드 재선택 시 결과 유지를 위해 캐시 + 새로고침해도 유지되도록 localStorage에 저장)
+        const CARD_USAGE_STORAGE_KEY = 'expenseDemoCardUsageCache';
+        function loadCardUsageCache() {
+            try {
+                const saved = localStorage.getItem(CARD_USAGE_STORAGE_KEY);
+                if(saved) return JSON.parse(saved);
+            } catch(e) {}
+            return {};
+        }
+        const cardUsageCache = loadCardUsageCache();
+        function pad2(n) { return String(n).padStart(2, '0'); }
+
+        // 이미 품의로 상신된 카드 사용내역은 목록/챗봇 검색에서 제외되도록 "사용됨" 표시를 저장 (새로고침해도 유지)
+        const USED_CARD_USAGE_KEY = 'expenseDemoUsedCardUsage';
+        function loadUsedCardUsageKeys() {
+            try {
+                const saved = localStorage.getItem(USED_CARD_USAGE_KEY);
+                if(saved) return new Set(JSON.parse(saved));
+            } catch(e) {}
+            return new Set();
+        }
+        const usedCardUsageKeys = loadUsedCardUsageKeys();
+
+        // 카드번호 + 내역 필드로 각 사용내역을 식별하는 키 (randomUsageForCard가 캐시하는 항목 자체엔 id가 없으므로 조합해서 생성)
+        function cardUsageKey(cardNumber, item) {
+            return `${cardNumber}|${item.date}|${item.time}|${item.store}|${item.amount}`;
+        }
+
+        function markCardUsageUsed(usageKey) {
+            usedCardUsageKeys.add(usageKey);
+            localStorage.setItem(USED_CARD_USAGE_KEY, JSON.stringify([...usedCardUsageKeys]));
+        }
+
+        function randomUsageForCard(cardNumber) {
+            if(cardUsageCache[cardNumber]) return cardUsageCache[cardNumber];
+
+            const count = 3 + Math.floor(Math.random() * 3); // 3~5건
+            const items = [];
+            for(let i = 0; i < count; i++) {
+                const store = STORE_POOL[Math.floor(Math.random() * STORE_POOL.length)];
+                const day = 2 + Math.floor(Math.random() * 14); // 2~15일
+                const hour = 7 + Math.floor(Math.random() * 15); // 07~21시
+                const minute = Math.floor(Math.random() * 60);
+                const amount = (8 + Math.floor(Math.random() * 143)) * 1000; // 8,000~150,000원
+                items.push({
+                    store: store.name,
+                    location: store.location,
+                    date: `2026-01-${pad2(day)}`,
+                    time: `${pad2(hour)}:${pad2(minute)}`,
+                    amount: amount
+                });
+            }
+            items.sort((a, b) => (a.date + a.time < b.date + b.time) ? 1 : -1); // 최신순
+            cardUsageCache[cardNumber] = items;
+            localStorage.setItem(CARD_USAGE_STORAGE_KEY, JSON.stringify(cardUsageCache));
+            return items;
+        }
+
+        // 품의부서 변경 시 해당 부서의 카드 목록 렌더링
+        function renderDeptCardList() {
+            const deptValue = document.getElementById('deptCode').value;
+            const cards = DEPT_CARDS[deptValue] || [];
+            const listEl = document.getElementById('deptCardList');
+            listEl.innerHTML = '';
+
+            cards.forEach(c => {
+                const label = document.createElement('label');
+                label.className = "flex items-center gap-2 border border-slate-200 rounded px-3 py-2 cursor-pointer hover:bg-blue-50 has-[:checked]:bg-blue-50 has-[:checked]:border-blue-400";
+                label.innerHTML = `
+                    <input type="radio" name="deptCardSelect" value="${c.number}" data-holder="${c.holder}" onchange="selectDeptCard(this)">
+                    <span class="font-mono text-slate-700">${c.number}</span>
+                    <span class="text-slate-400">(${c.holder})</span>
+                `;
+                listEl.appendChild(label);
+            });
+
+            // 부서가 바뀌면 카드/사용내역 선택 상태 초기화
+            document.getElementById('cardNumberLabel').innerText = "카드를 선택해 주세요";
+            document.getElementById('cardUsageTableBody').innerHTML =
+                '<tr><td colspan="5" class="p-4 text-center text-slate-400">위에서 카드를 선택하면 사용내역이 표시됩니다.</td></tr>';
+            calculateSelectedCard();
+        }
+
+        // 카드 선택 시 해당 카드의 승인내역(사용내역) 표시 (이미 품의로 상신된 건은 목록에서 제외)
+        function renderCardUsageTable(cardNumber, holder) {
+            document.getElementById('cardNumberLabel').innerText = `카드번호: ${cardNumber} (${holder})`;
+
+            const items = randomUsageForCard(cardNumber).filter(it => !usedCardUsageKeys.has(cardUsageKey(cardNumber, it)));
+            const tbody = document.getElementById('cardUsageTableBody');
+            tbody.innerHTML = '';
+
+            if(items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">이미 품의 처리된 카드입니다 (남은 사용내역 없음).</td></tr>';
+                calculateSelectedCard();
+                return;
+            }
+
+            items.forEach(it => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-blue-50";
+                tr.innerHTML = `
+                    <td class="p-2 text-center"><input type="checkbox" name="cardItem" value="${it.amount}" data-store="${it.store}" data-date="${it.date}" data-location="${it.location}" data-time="${it.time}" data-usage-key="${cardUsageKey(cardNumber, it)}" onchange="calculateSelectedCard()"></td>
+                    <td class="p-2">${it.date.replace(/-/g, '/')} ${it.time}</td>
+                    <td class="p-2 text-slate-900 font-sans">${it.store}</td>
+                    <td class="p-2 text-right font-semibold">${it.amount.toLocaleString()}</td>
+                    <td class="p-2 text-center text-emerald-600">매입</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            calculateSelectedCard();
+        }
+
+        function selectDeptCard(radio) {
+            renderCardUsageTable(radio.value, radio.getAttribute('data-holder'));
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            
+            // 네비게이션 버튼 스타일 토글
+            ['input-tab', 'approve-tab', 'status-tab'].forEach(t => {
+                const btn = document.getElementById(`btn-${t}`);
+                if(t === tabId) {
+                    btn.className = "w-full text-left px-4 py-2.5 rounded font-medium bg-blue-600 text-white";
+                } else {
+                    btn.className = "w-full text-left px-4 py-2.5 rounded font-medium text-slate-400 hover:bg-slate-700 hover:text-white transition";
+                }
+            });
+            renderAll();
+        }
+
+        const MEETING_VALUE = "40AA 본사 회의비";
+        const ORG_ACTIVATION_VALUE = "45BC 본사 조직활성화비";
+        const WORK_PROMOTION_VALUE = "08WA 본사 업무추진비";
+
+        // 카드 선택 건이 회의비 요건(여의도 내, 오후 8시 이전)을 만족하는지 여부 (제출 시점 검증에 재사용)
+        let lastCardMeetingEligible = false;
+
+        function timeToMinutes(t) {
+            const [h, m] = t.split(':').map(Number);
+            return h * 60 + m;
+        }
+
+        // 법인카드 체크 박스 선택 시 금액 자동 동기화 + 남은 예산을 참고한 추천 적요/계정 자동 입력
+        function calculateSelectedCard() {
+            const checkboxes = document.getElementsByName('cardItem');
+            let sum = 0;
+            let items = [];
+
+            checkboxes.forEach(cb => {
+                if(cb.checked) {
+                    sum += parseInt(cb.value);
+                    items.push({
+                        store: cb.getAttribute('data-store'),
+                        location: cb.getAttribute('data-location'),
+                        time: cb.getAttribute('data-time')
+                    });
+                }
+            });
+
+            document.getElementById('drAmount').value = sum || '';
+            document.getElementById('crAmount').value = sum || '';
+
+            const recSection = document.getElementById('recommend-section');
+            const minutesUpload = document.getElementById('meeting-minutes-upload');
+
+            if(items.length === 0) {
+                recSection.classList.add('hidden');
+                minutesUpload.classList.add('hidden');
+                lastCardMeetingEligible = false;
+                return;
+            }
+
+            document.getElementById('payee').value = "본지점 (법인카드)";
+
+            // 회의비 요건: 선택된 건 전부 여의도 내, 오후 8시(20:00) 이전
+            const locationOk = items.every(i => i.location === '여의도');
+            const timeOk = items.every(i => timeToMinutes(i.time) <= 20 * 60);
+            lastCardMeetingEligible = locationOk && timeOk;
+
+            let recAccountValue, requiresMinutes;
+            if(lastCardMeetingEligible) {
+                recAccountValue = MEETING_VALUE;
+                requiresMinutes = sum >= 100000;
+            } else {
+                recAccountValue = ORG_ACTIVATION_VALUE;
+                requiresMinutes = false;
+            }
+
+            document.getElementById('drAccount').value = recAccountValue;
+            document.getElementById('docSummary').value = '';
+
+            const budget = BUDGET_CODES.find(b => b.value === recAccountValue);
+            const remains = getBudgetRemains(recAccountValue);
+            const promoRemains = getBudgetRemains(WORK_PROMOTION_VALUE);
+
+            let html = `📌 추천 적요: <strong>${budget.name}</strong> · 잔여예산 ${remains.toLocaleString()}원`;
+            if(sum > remains) {
+                const shortfall = sum - Math.max(remains, 0);
+                html += `<br><span class="text-red-600 font-semibold">⚠ 예산 부족 — 부족분 ${shortfall.toLocaleString()}원은 본사 업무추진비(잔여 ${promoRemains.toLocaleString()}원)에서 자동 처리됩니다.</span>`;
+            }
+            if(!lastCardMeetingEligible) {
+                const reasons = [];
+                if(!locationOk) reasons.push('여의도 외 지역 사용 건 포함');
+                if(!timeOk) reasons.push('오후 8시 이후 사용 건 포함');
+                html += `<br><span class="text-slate-500">${reasons.join(' / ')}으로 회의비 적용이 불가하여 조직활성화비로 추천되었습니다.</span>`;
+            }
+            if(requiresMinutes) {
+                html += `<br><span class="text-amber-700 font-semibold">⚠ 10만원 이상 회의비 처리 — 하단에서 회의록 PDF를 업로드해 주세요.</span>`;
+            }
+            recSection.innerHTML = html;
+            recSection.classList.remove('hidden');
+            minutesUpload.classList.toggle('hidden', !requiresMinutes);
+        }
+
+        // 증빙 구분 변경 (카드 수강선택 vs 일반 영수증 처리 전환)
+        function toggleCardSection() {
+            const type = document.getElementById('evidenceType').value;
+            const cardSec = document.getElementById('card-select-section');
+            const deptCardSec = document.getElementById('dept-card-list-section');
+            const crOpt = document.getElementById('crAccountOpt');
+
+            if(type === '3.법인카드') {
+                cardSec.classList.remove('hidden');
+                deptCardSec.classList.remove('hidden');
+                crOpt.text = "미지급비용 (카드 결제건)";
+                calculateSelectedCard();
+            } else {
+                cardSec.classList.add('hidden');
+                deptCardSec.classList.add('hidden');
+                crOpt.text = "본지점 (현금/현장지급)";
+                document.getElementById('drAccount').value = "12CC (일반)전화료";
+                document.getElementById('drAmount').value = "89000"; // 이미지 8번 예시 자동 입력 유도
+                document.getElementById('crAmount').value = "89000";
+                document.getElementById('docSummary').value = "부서장 통신비 지원금 (LG유플러스)";
+                document.getElementById('payee').value = "010 법인업무지원부";
+                lastCardMeetingEligible = false;
+                document.getElementById('recommend-section').classList.add('hidden');
+                document.getElementById('meeting-minutes-upload').classList.add('hidden');
+            }
+        }
+
+        // 적요(계정과목)별 사용금액 계산
+        function getBudgetUsed(accountValue) {
+            return dataset.filter(d => d.status === '승인' && d.account === accountValue).reduce((sum, d) => sum + d.amount, 0);
+        }
+
+        // 적요(계정과목)별 예산 잔액 계산
+        function getBudgetRemains(accountValue) {
+            const budget = BUDGET_CODES.find(b => b.value === accountValue);
+            if(!budget) return 0;
+            return budget.allocated - getBudgetUsed(accountValue);
+        }
+
+        // 지출처리 일자 검증 (월/수/금만 가능, 23일 지출처리 불가)
+        const ENFORCE_DOC_DATE_RULE = false; // TODO: 테스트 끝나면 true로 되돌리기 (월/수/금 + 23일 제한 재활성화)
+
+        function validateDocDate(showAlert) {
+            const dateStr = document.getElementById('docDate').value;
+            const warningEl = document.getElementById('docDateWarning');
+            if(!dateStr) return false;
+
+            const d = new Date(dateStr + 'T00:00:00');
+            const day = d.getDay(); // 0=일 1=월 2=화 3=수 4=목 5=금 6=토
+            const isAllowedWeekday = (day === 1 || day === 3 || day === 5);
+            const isBlocked23rd = d.getDate() === 23;
+            const valid = !ENFORCE_DOC_DATE_RULE || (isAllowedWeekday && !isBlocked23rd);
+
+            warningEl.classList.toggle('hidden', valid);
+
+            if(!valid && showAlert !== false) {
+                if(isBlocked23rd) {
+                    alert("23일은 지출처리가 불가능한 날짜입니다.");
+                } else {
+                    alert("지출처리는 월·수·금요일만 가능합니다.");
+                }
+            }
+            return valid;
+        }
+
+        // 예산 부족시 원장 분할 처리 (회의비/조직활성화비 부족분은 업무추진비에서 자동 처리, 업무추진비는 대체 불가)
+        function buildLedgerEntries(accountValue, amount) {
+            const budget = BUDGET_CODES.find(b => b.value === accountValue);
+            const remains = getBudgetRemains(accountValue);
+
+            if(amount <= remains) {
+                return [{ account: accountValue, amount: amount }];
+            }
+
+            if(accountValue === WORK_PROMOTION_VALUE) {
+                alert(`[5527] "${budget.name}" 예산 잔액을 초과합니다.\n현재 잔액: ${remains.toLocaleString()}원 / 요청 금액: ${amount.toLocaleString()}원\n본사업무추진비는 부족해도 다른 예산으로 대체할 수 없습니다.`);
+                return null;
+            }
+
+            // 회의비 / 조직활성화비 부족분 -> 업무추진비 자동 처리
+            const primaryPortion = Math.max(remains, 0);
+            const shortfall = amount - primaryPortion;
+            const promoRemains = getBudgetRemains(WORK_PROMOTION_VALUE);
+
+            if(shortfall > promoRemains) {
+                const totalGap = shortfall - promoRemains;
+                alert(`[5527] 예산이 부족합니다.\n"${budget.name}" 잔액: ${remains.toLocaleString()}원 + 본사업무추진비 잔액: ${promoRemains.toLocaleString()}원으로도 ${totalGap.toLocaleString()}원이 부족합니다.`);
+                return null;
+            }
+
+            if(!confirm(`[5527] "${budget.name}" 예산이 부족하여 부족분이 본사업무추진비에서 자동 처리됩니다.\n${budget.name}: ${primaryPortion.toLocaleString()}원 / 본사업무추진비: ${shortfall.toLocaleString()}원\n계속 진행하시겠습니까?`)) {
+                return null;
+            }
+
+            const entries = [];
+            if(primaryPortion > 0) entries.push({ account: accountValue, amount: primaryPortion });
+            entries.push({ account: WORK_PROMOTION_VALUE, amount: shortfall });
+            return entries;
+        }
+
+        // 폼 제출 프로세스 (신규 품의 등록)
+        function submitForm() {
+            const date = document.getElementById('docDate').value;
+            const deptValue = document.getElementById('deptCode').value;
+            const deptName = deptValue.split(' ').slice(1).join(' ');
+            const account = document.getElementById('drAccount').value;
+            const amount = parseInt(document.getElementById('drAmount').value) || 0;
+            const summary = document.getElementById('docSummary').value || "미지정 적요 지출";
+
+            if(!validateDocDate()) return;
+
+            if(amount <= 0) return alert("결의 금액을 입력하거나 카드를 선택해 주세요.");
+
+            // 본사회의비 규칙: 여의도 내 오후 8시 이전 사용 건만 가능
+            if(account === MEETING_VALUE && !lastCardMeetingEligible) {
+                return alert("본사회의비는 여의도 내에서 오후 8시 이전에 사용한 건만 처리 가능합니다.");
+            }
+            // 본사회의비 10만원 이상 - 회의록 PDF 업로드 필수
+            if(account === MEETING_VALUE && amount >= 100000) {
+                const fileInput = document.getElementById('meetingMinutesFile');
+                if(!fileInput.files || fileInput.files.length === 0) {
+                    return alert("10만원 이상 본사회의비는 회의록 PDF 파일을 업로드해야 합니다.");
+                }
+            }
+
+            const entries = buildLedgerEntries(account, amount);
+            if(!entries) return;
+
+            // 이번 제출이 사용한 카드결제 건들 (승인취소 시 다시 되돌리기 위해 각 결의 건에 함께 기록해둔다)
+            const sourceUsageKeys = Array.from(document.querySelectorAll('input[name="cardItem"]:checked'))
+                .map(cb => cb.getAttribute('data-usage-key'))
+                .filter(Boolean);
+
+            let nextId = dataset.length > 0 ? Math.max(...dataset.map(d => d.id)) + 1 : 1001;
+            const issuedIds = [];
+            entries.forEach(entry => {
+                const entryBudget = BUDGET_CODES.find(b => b.value === entry.account);
+                dataset.unshift({
+                    id: nextId,
+                    dept: deptName,
+                    date: date,
+                    title: entries.length > 1 ? `${summary} (${entryBudget.name} 분할처리)` : summary,
+                    amount: entry.amount,
+                    account: entry.account,
+                    status: "미승인",
+                    sourceUsageKeys: sourceUsageKeys
+                });
+                issuedIds.push(nextId);
+                nextId++;
+            });
+
+            // 품의로 상신된 카드결제 건은 "사용됨" 처리해서 카드 사용내역 목록/챗봇 검색에서 제외
+            sourceUsageKeys.forEach(k => markCardUsageUsed(k));
+            const checkedCardRadio = document.querySelector('input[name="deptCardSelect"]:checked');
+            if(checkedCardRadio) renderCardUsageTable(checkedCardRadio.value, checkedCardRadio.getAttribute('data-holder'));
+
+            alert(`지출 결의서가 정상 등록되었습니다.\n[결재 대기 번호: ${issuedIds.join(', ')}]`);
+            switchTab('approve-tab'); // 곧바로 승인단 시뮬레이션으로 이동
+        }
+
+        // 부서장 승인 체크박스 토글 관련
+        function toggleAllApprovals(master) {
+            document.querySelectorAll('.approve-item-check').forEach(cb => cb.checked = master.checked);
+        }
+
+        function processApproval() {
+            const checkedBoxes = document.querySelectorAll('.approve-item-check:checked');
+            if(checkedBoxes.length === 0) return alert("승인 처리할 결의 항목을 선택해 주세요.");
+
+            checkedBoxes.forEach(cb => {
+                const id = parseInt(cb.value);
+                const item = dataset.find(d => d.id === id);
+                if(item) item.status = "승인";
+            });
+
+            alert("선택하신 지출 건들의 부서장 결재가 완료되었습니다.");
+            switchTab('status-tab');
+        }
+
+        // 승인취소(반려): 선택한 미승인 건을 목록에서 삭제하고, 그 건이 사용했던 카드결제는
+        // 다른 품의 건에서 더 이상 참조하지 않는 경우에 한해 1번 탭(카드 사용내역)에 다시 노출시킨다.
+        function cancelApproval() {
+            const checkedBoxes = document.querySelectorAll('.approve-item-check:checked');
+            if(checkedBoxes.length === 0) return alert("승인취소 처리할 결의 항목을 선택해 주세요.");
+
+            if(!confirm(`선택한 ${checkedBoxes.length}건을 승인취소(반려)할까요?\n목록에서 삭제되고, 연결된 카드결제 건은 1.지출결의 입력 탭에서 다시 선택할 수 있게 됩니다.`)) return;
+
+            const idsToCancel = new Set(Array.from(checkedBoxes).map(cb => parseInt(cb.value)));
+            const cancelledItems = dataset.filter(d => idsToCancel.has(d.id));
+            dataset = dataset.filter(d => !idsToCancel.has(d.id));
+
+            // 취소되지 않고 남아있는 건들이 여전히 참조 중인 카드결제 키는 되돌리지 않는다 (분할 처리로 형제 건이 남아있는 경우 등)
+            const stillReferenced = new Set();
+            dataset.forEach(d => (d.sourceUsageKeys || []).forEach(k => stillReferenced.add(k)));
+
+            cancelledItems.forEach(item => {
+                (item.sourceUsageKeys || []).forEach(k => {
+                    if(!stillReferenced.has(k)) usedCardUsageKeys.delete(k);
+                });
+            });
+            localStorage.setItem(USED_CARD_USAGE_KEY, JSON.stringify([...usedCardUsageKeys]));
+
+            const checkedCardRadio = document.querySelector('input[name="deptCardSelect"]:checked');
+            if(checkedCardRadio) renderCardUsageTable(checkedCardRadio.value, checkedCardRadio.getAttribute('data-holder'));
+
+            alert("선택하신 품의 건이 승인취소(반려) 처리되었습니다.");
+            renderAll();
+        }
+
+        // 통합 화면 리렌더링
+        function renderAll() {
+            saveDataset(); // dataset이 바뀐 뒤 항상 renderAll이 호출되므로 여기서 저장하면 새로고침해도 유지됨
+
+            // 1. 승인 관리 테이블 바인딩
+            const appTbody = document.getElementById('approvalTableBody');
+            appTbody.innerHTML = '';
+            
+            // 2. 종합 레포트 테이블 바인딩
+            const statTbody = document.getElementById('statusTableBody');
+            statTbody.innerHTML = '';
+
+            dataset.forEach(item => {
+                // 승인 탭 구성
+                if(item.status === '미승인') {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-50";
+                    tr.innerHTML = `
+                        <td class="p-3 text-center"><input type="checkbox" value="${item.id}" class="approve-item-check"></td>
+                        <td class="p-3 font-sans text-slate-600">${item.dept}</td>
+                        <td class="p-3">${item.date}</td>
+                        <td class="p-3 font-sans text-slate-900">${item.title}</td>
+                        <td class="p-3 text-right font-bold">${item.amount.toLocaleString()}</td>
+                        <td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 font-sans">결재대기</span></td>
+                        <td class="p-3 text-center text-slate-400">${item.id}</td>
+                    `;
+                    appTbody.appendChild(tr);
+                }
+
+                // 현황 레포트 탭 구성
+                const trStat = document.createElement('tr');
+                trStat.className = "hover:bg-slate-50";
+                const isApp = item.status === '승인';
+                trStat.innerHTML = `
+                    <td class="p-2 text-slate-400">${item.id}</td>
+                    <td class="p-2">${item.date}</td>
+                    <td class="p-2 font-sans text-slate-900">${item.title}</td>
+                    <td class="p-2 text-right font-bold text-slate-700">${item.amount.toLocaleString()}원</td>
+                    <td class="p-2 font-sans text-slate-500">${item.account}</td>
+                    <td class="p-2 text-center">
+                        <span class="px-2 py-0.5 rounded-sm text-xs font-sans ${isApp ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-700 font-medium'}">
+                            ${item.status === '승인' ? '승인완료' : '결재 대기'}
+                        </span>
+                    </td>
+                `;
+                statTbody.appendChild(trStat);
+            });
+
+            // 3. [5527] 적요별 예산 배정/사용/잔액 테이블 바인딩
+            const budgetTbody = document.getElementById('budgetTableBody');
+            budgetTbody.innerHTML = '';
+            BUDGET_CODES.forEach(b => {
+                const used = getBudgetUsed(b.value);
+                const remains = b.allocated - used;
+                const trBudget = document.createElement('tr');
+                trBudget.className = "hover:bg-slate-50";
+                trBudget.innerHTML = `
+                    <td class="p-3 text-slate-500">${b.code}</td>
+                    <td class="p-3 font-sans text-slate-900">${b.name}</td>
+                    <td class="p-3 text-right text-slate-700">${b.allocated.toLocaleString()}원</td>
+                    <td class="p-3 text-right text-emerald-700">${used.toLocaleString()}원</td>
+                    <td class="p-3 text-right font-bold ${remains < 0 ? 'text-red-600' : 'text-blue-700'}">${remains.toLocaleString()}원</td>
+                `;
+                budgetTbody.appendChild(trBudget);
+            });
+        }
+
+        // 최초 로드 실행
+        renderAll();
+        validateDocDate(false); // 알림 없이 경고 배지만 표시
+        renderDeptCardList(); // 기본 선택된 품의부서의 카드 목록 표시
+    </script>
+
+    <script>
+        // AI 챗봇 상태 관리 (위 <script>의 BUDGET_CODES/dataset/DEPT_CARDS 등 실제 데이터·함수를 그대로 사용)
+        let chatbotState = {
+            step: 'IDLE', // IDLE -> AWAITING_ATTENDEES -> CONFIRMATION (신규 품의) / IDLE -> APPROVAL_CONFIRMATION (승인·취소 명령)
+            pendingTransaction: null,
+            recommendedProposal: null,
+            pendingApprovalAction: null // { type: 'approve' | 'cancel', ids: number[] }
+        };
+
+        // 현재 선택된 품의부서가 보유한 모든 카드의 사용내역을 한데 모은다 (카드결제 검색/랜덤선택의 공통 후보 목록)
+        function collectDeptCardUsage() {
+            const deptValue = document.getElementById('deptCode').value;
+            const deptName = deptValue.split(' ').slice(1).join(' ');
+            const cards = DEPT_CARDS[deptValue] || [];
+
+            const candidates = [];
+            cards.forEach(card => {
+                randomUsageForCard(card.number).forEach(item => {
+                    const usageKey = cardUsageKey(card.number, item);
+                    if (usedCardUsageKeys.has(usageKey)) return; // 이미 품의 처리된 건은 후보에서 제외
+                    candidates.push({ ...item, cardNumber: card.number, holder: card.holder, usageKey });
+                });
+            });
+
+            return { deptValue, deptName, cards, candidates };
+        }
+
+        function buildTxFromCandidate(picked, deptValue, deptName) {
+            return {
+                cardNumber: picked.cardNumber,
+                holder: picked.holder,
+                usageKey: picked.usageKey,
+                deptValue,
+                deptName,
+                store: picked.store,
+                location: picked.location,
+                date: picked.date,
+                time: picked.time,
+                amount: picked.amount
+            };
+        }
+
+        // 가상 카드결제 발생 버튼: 현재 선택된 품의부서의 보유 카드 중 하나를 골라
+        // randomUsageForCard()가 생성한 실제 사용내역 중 한 건을 "새로 감지된 결제"로 사용한다.
+        function triggerVirtualCardUsage() {
+            const { deptName, cards, candidates } = collectDeptCardUsage();
+
+            if (cards.length === 0) {
+                addMessage(`현재 선택된 품의부서(${deptName})에는 등록된 법인카드가 없습니다. 상단에서 카드를 보유한 부서를 먼저 선택해 주세요.`, 'system');
+                return;
+            }
+
+            const picked = candidates[Math.floor(Math.random() * candidates.length)];
+            chatbotState.pendingTransaction = buildTxFromCandidate(picked, document.getElementById('deptCode').value, deptName);
+            analyzeAndRecommend(chatbotState.pendingTransaction);
+        }
+
+        // "~ 결제건 품의해줘" 류의 자연어 명령인지 판별 (품의 + 올려줘/해줘/부탁/상신/등록 같은 명령 어휘가 있어야 함)
+        function isCardCommand(text) {
+            return /품의/.test(text) && /(올려줘|해\s*줘|부탁|상신|등록)/.test(text);
+        }
+
+        // 명령 문장에서 날짜/시간/금액/상호명을 함께 추출한다.
+        // 상호명만으로는 같은 가맹점 방문이 여러 건일 수 있으므로, 특정한 건 하나로 좁히려면
+        // 날짜·시간·상호명·금액을 함께 입력해야 한다(findCardTransactionByQuery가 겹치면 후보를 되돌려줌).
+        function parseTransactionQuery(text) {
+            let remaining = text;
+            const result = { date: null, time: null, amount: null, store: null };
+
+            let m = remaining.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+            if (m) {
+                result.date = `${m[1]}-${pad2(parseInt(m[2], 10))}-${pad2(parseInt(m[3], 10))}`;
+                remaining = remaining.replace(m[0], ' ');
+            } else {
+                m = remaining.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+                if (m) {
+                    result.date = `2026-${pad2(parseInt(m[1], 10))}-${pad2(parseInt(m[2], 10))}`;
+                    remaining = remaining.replace(m[0], ' ');
+                }
+            }
+
+            m = remaining.match(/(\d{1,2}):(\d{2})/);
+            if (m) {
+                result.time = `${pad2(parseInt(m[1], 10))}:${m[2]}`;
+                remaining = remaining.replace(m[0], ' ');
+            } else {
+                m = remaining.match(/(\d{1,2})\s*시\s*(\d{1,2})?\s*분?/);
+                if (m) {
+                    result.time = `${pad2(parseInt(m[1], 10))}:${pad2(m[2] ? parseInt(m[2], 10) : 0)}`;
+                    remaining = remaining.replace(m[0], ' ');
+                }
+            }
+
+            m = remaining.match(/(\d+)\s*만\s*원?/);
+            if (m) {
+                result.amount = parseInt(m[1], 10) * 10000;
+                remaining = remaining.replace(m[0], ' ');
+            } else {
+                m = remaining.match(/(\d[\d,]{2,})\s*원/);
+                if (m) {
+                    result.amount = parseInt(m[1].replace(/,/g, ''), 10);
+                    remaining = remaining.replace(m[0], ' ');
+                } else {
+                    m = remaining.match(/\b(\d{4,7})\b/);
+                    if (m) {
+                        result.amount = parseInt(m[1], 10);
+                        remaining = remaining.replace(m[0], ' ');
+                    }
+                }
+            }
+
+            remaining = remaining
+                .replace(/지출\s*품의/g, '')
+                .replace(/품의/g, '')
+                .replace(/내역|결제건|건(?=\s|$)/g, '')
+                .replace(/올려줘|해\s*줘|부탁(?:해요|드려요|드립니다|해)?|상신해줘|등록해줘|상신|등록/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            if (remaining) result.store = remaining;
+            return result;
+        }
+
+        function levenshtein(a, b) {
+            const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+            for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+            for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+            for (let i = 1; i <= a.length; i++) {
+                for (let j = 1; j <= b.length; j++) {
+                    dp[i][j] = a[i - 1] === b[j - 1]
+                        ? dp[i - 1][j - 1]
+                        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+                }
+            }
+            return dp[a.length][b.length];
+        }
+
+        // 상호명 오탈자(예: "바게트" vs 실제 상호의 "바게뜨")를 허용하는 매칭.
+        // 먼저 정확한 부분 문자열을 시도하고, 실패하면 질의어 길이만큼 슬라이딩하며 편집거리가 가까운 부분을 찾는다.
+        function storeMatches(store, query) {
+            const normStore = store.replace(/\s+/g, '');
+            const normQuery = query.replace(/\s+/g, '');
+            if (!normQuery) return false;
+            if (normStore.includes(normQuery)) return true;
+
+            const maxDist = normQuery.length <= 2 ? 1 : Math.max(1, Math.floor(normQuery.length * 0.25));
+
+            if (normQuery.length >= normStore.length) {
+                return levenshtein(normQuery, normStore) <= maxDist;
+            }
+            for (let i = 0; i <= normStore.length - normQuery.length; i++) {
+                const window = normStore.slice(i, i + normQuery.length);
+                if (levenshtein(window, normQuery) <= maxDist) return true;
+            }
+            return false;
+        }
+
+        // 날짜/시간/상호명/금액 조건으로 현재 부서의 카드 사용내역 중 일치하는 건을 찾는다.
+        // 조건이 하나도 없으면 무작위 한 건, 조건은 있는데 두 건 이상 겹치면 'ambiguous'로 후보 목록을 돌려준다.
+        function findCardTransactionByQuery(parsed) {
+            const { deptValue, deptName, cards, candidates } = collectDeptCardUsage();
+
+            if (cards.length === 0) return { error: 'no-card', deptName };
+            if (candidates.length === 0) return { error: 'not-found', deptName };
+
+            const hasFilter = parsed.date || parsed.time || parsed.amount !== null || parsed.store;
+            if (!hasFilter) {
+                const picked = candidates[Math.floor(Math.random() * candidates.length)];
+                return { tx: buildTxFromCandidate(picked, deptValue, deptName) };
+            }
+
+            let matches = candidates;
+            if (parsed.date) matches = matches.filter(c => c.date === parsed.date);
+            if (parsed.time) matches = matches.filter(c => c.time === parsed.time);
+            if (parsed.amount !== null) matches = matches.filter(c => c.amount === parsed.amount);
+            if (parsed.store) matches = matches.filter(c => storeMatches(c.store, parsed.store));
+
+            if (matches.length === 0) return { error: 'not-found', deptName };
+            if (matches.length > 1) return { error: 'ambiguous', deptName, matches };
+
+            return { tx: buildTxFromCandidate(matches[0], deptValue, deptName) };
+        }
+
+        // 챗봇 입력창에 직접 친 "~ 결제건 품의해줘" 명령 처리
+        function handleCardCommand(parsed) {
+            const result = findCardTransactionByQuery(parsed);
+
+            if (result.error === 'no-card') {
+                addMessage(`현재 선택된 품의부서(${result.deptName})에는 등록된 법인카드가 없습니다. 상단에서 카드를 보유한 부서를 먼저 선택해 주세요.`, 'system');
+                return;
+            }
+            if (result.error === 'not-found') {
+                addMessage(`조건에 맞는 카드 사용내역을 찾지 못했습니다. 날짜/시간/상호명/금액을 다시 확인해 주시거나, 상단 💳 버튼을 눌러 보세요.`, 'system');
+                return;
+            }
+            if (result.error === 'ambiguous') {
+                const list = result.matches.slice(0, 5).map(c =>
+                    `- ${c.date.replace(/-/g, '/')} ${c.time} · ${c.store} · ${c.amount.toLocaleString()}원`
+                ).join('<br>');
+                addMessage(`조건에 맞는 내역이 ${result.matches.length}건이라 특정할 수 없습니다. 날짜·시간·상호명·금액을 함께 입력해 한 건으로 좁혀주세요.<br>${list}`, 'system');
+                return;
+            }
+
+            chatbotState.pendingTransaction = result.tx;
+            analyzeAndRecommend(result.tx);
+        }
+
+        // 문장에서 언급된 예산코드를 찾는다 (코드 자체 또는 적요명으로)
+        function findBudgetCodeMention(text) {
+            const direct = BUDGET_CODES.find(b => text.includes(b.code));
+            if (direct) return direct;
+
+            const nameToCode = [
+                { keys: ['업무추진비'], code: '08WA' },
+                { keys: ['회의비'], code: '40AA' },
+                { keys: ['조직활성화비'], code: '45BC' },
+                { keys: ['전화료'], code: '12CC' },
+                { keys: ['교통비'], code: '20DD' }
+            ];
+            const hit = nameToCode.find(entry => entry.keys.some(k => text.includes(k)));
+            return hit ? BUDGET_CODES.find(b => b.code === hit.code) : null;
+        }
+
+        // 진행 중인 품의의 적요를 사용자가 직접 다른 예산코드로 바꾸도록 요청하는 명령인지 확인 후 처리.
+        // 참석자 대기/최종확인 단계 모두에서 인식하며, 처리했으면 true를 반환해 이후 단계별 분기를 건너뛰게 한다.
+        function tryHandleAccountChange(text) {
+            if (!/(바꿔|변경|말고|대신)/.test(text)) return false;
+
+            const matched = findBudgetCodeMention(text);
+            if (!matched) return false;
+
+            const prop = chatbotState.recommendedProposal;
+            const tx = chatbotState.pendingTransaction;
+            if (!prop || !tx) return false;
+
+            prop.accountValue = matched.value;
+            prop.requiresMinutes = matched.value === MEETING_VALUE && tx.amount >= 100000;
+
+            const remains = getBudgetRemains(matched.value);
+            addMessage(`✅ 적요를 <b>${matched.name}(${matched.code})</b>로 변경했습니다. (잔여예산 ${remains.toLocaleString()}원)`, 'system');
+
+            if (chatbotState.step === 'CONFIRMATION' && prop.attendeeLabel !== undefined) {
+                prop.purpose = buildPurposeForAccount(prop.accountValue, prop.attendeeLabel, prop.topic);
+                addMessage(`📝 사유: ${prop.purpose}<br>이대로 최종 품의 상신을 올릴까요? (<b>'응'</b> 또는 <b>'확인'</b> 입력)`, 'bot');
+                chatbotState.step = 'CONFIRMATION';
+            } else {
+                addMessage(`참석자와 회의/업무 내용을 "참석자 / 내용" 형태로 입력해주세요. (예: 김철수, 이영희 / 3분기 마케팅 전략 회의)`, 'bot');
+                chatbotState.step = 'AWAITING_ATTENDEES';
+            }
+            return true;
+        }
+
+        // "예산 얼마 남았어?" 류의 질문인지 판별
+        function isBudgetQuery(text) {
+            return /(예산|잔액|잔여|얼마|남았|남아)/.test(text);
+        }
+
+        // 특정 적요가 언급되면 그 적요만, 아니면 전체 5종 적요의 배정/사용/잔액을 안내
+        function handleBudgetQuery(text) {
+            const matched = findBudgetCodeMention(text);
+
+            if (matched) {
+                const used = getBudgetUsed(matched.value);
+                const remains = getBudgetRemains(matched.value);
+                addMessage(`💰 <b>${matched.name}(${matched.code})</b><br>배정액: ${matched.allocated.toLocaleString()}원 · 사용: ${used.toLocaleString()}원 · <b>잔여: ${remains.toLocaleString()}원</b>`, 'bot');
+                return;
+            }
+
+            const lines = BUDGET_CODES.map(b => {
+                const remains = getBudgetRemains(b.value);
+                return `- ${b.name}(${b.code}): 잔여 ${remains.toLocaleString()}원 / 배정 ${b.allocated.toLocaleString()}원`;
+            }).join('<br>');
+            addMessage(`💰 <b>현재 예산 잔액 현황</b><br>${lines}`, 'bot');
+        }
+
+        // 회의비/조직활성화비 판정 + 예산 잔액 안내 (calculateSelectedCard와 동일한 규칙 재사용)
+        function analyzeAndRecommend(tx) {
+            addMessage(`[알림] 법인카드 승인 내역이 연동되었습니다.<br><b>💳 ${tx.cardNumber} (${tx.holder})</b><br><b>📍 ${tx.store}</b> (${tx.location})<br><b>💰 ${tx.amount.toLocaleString()}원</b> · ${tx.date.replace(/-/g, '/')} ${tx.time}`, 'system');
+
+            const locationOk = tx.location === '여의도';
+            const timeOk = timeToMinutes(tx.time) <= 20 * 60;
+            const eligible = locationOk && timeOk;
+
+            const accountValue = eligible ? MEETING_VALUE : ORG_ACTIVATION_VALUE;
+            const budget = BUDGET_CODES.find(b => b.value === accountValue);
+            const remains = getBudgetRemains(accountValue);
+            const promoRemains = getBudgetRemains(WORK_PROMOTION_VALUE);
+            const requiresMinutes = eligible && tx.amount >= 100000;
+
+            let html = `📌 추천 적요: <b>${budget.name}</b> · 잔여예산 ${remains.toLocaleString()}원`;
+            if (tx.amount > remains) {
+                const shortfall = tx.amount - Math.max(remains, 0);
+                html += `<br>🚨 <b>예산 분기 적용:</b> 잔액 부족으로 부족분 ${shortfall.toLocaleString()}원은 [본사업무추진비(잔여 ${promoRemains.toLocaleString()}원)]에서 자동 처리됩니다.`;
+            }
+            if (!eligible) {
+                const reasons = [];
+                if (!locationOk) reasons.push('여의도 외 지역');
+                if (!timeOk) reasons.push('오후 8시 이후 사용');
+                html += `<br>💡 ${reasons.join(' / ')}으로 회의비 적용이 불가하여 [조직활성화비]로 분류합니다.`;
+            }
+            if (requiresMinutes) {
+                html += `<br>⚠️ 10만 원 이상 회의비 건이므로 품의 완료 후 [회의록 PDF] 업로드가 별도로 필요합니다.`;
+            }
+
+            chatbotState.recommendedProposal = { accountValue, requiresMinutes };
+
+            setTimeout(() => {
+                addMessage(`🤖 <b>AI 분석 결과:</b><br>${html}<br><br>이 적요가 마음에 안 들면 <b>"회의비로 바꿔줘"</b>처럼 말씀해주세요.<br>이 내역으로 지출 품의 작성을 시작할까요?<br><b>참석자와 회의/업무 내용을 "참석자 / 내용" 형태로 입력해주세요.</b> (예: 김철수, 이영희 / 3분기 마케팅 전략 회의)`, 'bot');
+                chatbotState.step = 'AWAITING_ATTENDEES';
+            }, 600);
+        }
+
+        // "참석자 / 회의·업무 내용" 형태의 입력을 나눈다. "/"가 없으면 전체를 참석자로만 취급(내용 없음)
+        function parseAttendeeInput(text) {
+            const slashIdx = text.indexOf('/');
+            if (slashIdx !== -1) {
+                return {
+                    attendeeText: text.slice(0, slashIdx).trim(),
+                    topic: text.slice(slashIdx + 1).trim()
+                };
+            }
+
+            // "/" 없이 "이름,이름 내용"처럼 입력한 경우: 마지막 참석자 뒤 공백부터는 내용으로 인식
+            // (콤마로 구분된 마지막 조각에 공백이 있으면 그 공백 앞은 이름, 뒤는 내용)
+            const segments = text.split(/[,，、]+/).map(s => s.trim()).filter(Boolean);
+            if (segments.length === 0) return { attendeeText: text.trim(), topic: '' };
+
+            const lastSegment = segments[segments.length - 1];
+            const spaceIdx = lastSegment.indexOf(' ');
+            if (spaceIdx === -1) return { attendeeText: text.trim(), topic: '' };
+
+            const lastName = lastSegment.slice(0, spaceIdx).trim();
+            const topic = lastSegment.slice(spaceIdx + 1).trim();
+            const attendeeText = [...segments.slice(0, -1), lastName].join(', ');
+            return { attendeeText, topic };
+        }
+
+        // 참석자 텍스트("박수민, 박수빈")를 "박수민 외 1인" 형태로 축약
+        function buildAttendeeLabel(attendeeText) {
+            const names = attendeeText.split(/[,，、]+/).map(s => s.trim()).filter(Boolean);
+            const first = names[0] || attendeeText.trim();
+            const othersCount = Math.max(names.length - 1, 0);
+            return othersCount > 0 ? `${first} 외 ${othersCount}인` : first;
+        }
+
+        // 실제 상신 계정(회의비/조직활성화비/업무추진비)에 맞춰 사유 문구를 조립.
+        // 예산 부족으로 한 건이 두 계정으로 분할되면 각 분할 건마다 그 계정에 맞는 문구를 따로 생성한다.
+        function buildPurposeForAccount(accountValue, attendeeLabel, topic) {
+            if (accountValue === MEETING_VALUE) {
+                return topic ? `${attendeeLabel} ${topic} 관련회의` : `${attendeeLabel} 회의`;
+            }
+            if (accountValue === ORG_ACTIVATION_VALUE) {
+                return topic
+                    ? `${attendeeLabel} ${topic}관련 업무활성화로 인한 조직활성화비`
+                    : `${attendeeLabel} 업무활성화로 인한 조직활성화비`;
+            }
+            // WORK_PROMOTION_VALUE (예산 부족 시 자동 분할되는 계정)
+            return topic ? `${attendeeLabel} ${topic} 관련 업무추진비` : `${attendeeLabel} 업무추진비`;
+        }
+
+        // "승인해줘/결재해줘" 류의 승인 의도 판별
+        function isApprovalCommand(text) {
+            return /(승인해\s*줘|승인해|승인\s*처리|결재해\s*줘|결재해)/.test(text);
+        }
+
+        // "취소해줘/반려해줘" 류의 승인취소(반려) 의도 판별. 승인 의도와 동시에 감지되면(예: "승인 취소해줘") 이쪽을 우선한다.
+        function isCancelCommand(text) {
+            return /(승인취소|취소해\s*줘|취소해|반려해\s*줘|반려해|반려)/.test(text);
+        }
+
+        // 승인/취소 명령 문장에서 품의번호(ID)·금액·부서·내용 조건을 추출한다.
+        // "전체/모두/전부/일괄"이 포함되면 조건에 해당하는 모든 미승인 건을 대상으로 하는 일괄 처리로 인식한다.
+        function parseApprovalTargetQuery(text) {
+            let remaining = text;
+            const result = { ids: [], bulk: false, amount: null, amountOp: null, dept: null, content: null };
+
+            const bulkTestRe = /전체|모두|전부|일괄|다(?=\s|건|승인|취소|반려|$)/;
+            if (bulkTestRe.test(remaining)) {
+                result.bulk = true;
+                remaining = remaining.replace(/전체|모두|전부|일괄|다(?=\s|건|승인|취소|반려|$)/g, ' ');
+            }
+
+            let m = remaining.match(/(\d+)\s*만\s*원?\s*(이상|이하)?/);
+            if (m) {
+                result.amount = parseInt(m[1], 10) * 10000;
+                result.amountOp = m[2] || null;
+                remaining = remaining.replace(m[0], ' ');
+            } else {
+                m = remaining.match(/(\d[\d,]{2,})\s*원\s*(이상|이하)?/);
+                if (m) {
+                    result.amount = parseInt(m[1].replace(/,/g, ''), 10);
+                    result.amountOp = m[2] || null;
+                    remaining = remaining.replace(m[0], ' ');
+                }
+            }
+
+            // 품의번호(ID): 남은 문장에서 "번" 표시를 지운 뒤 숫자 그룹을 모두 추출 (콤마/공백으로 나열된 다중 ID 지원)
+            remaining = remaining.replace(/번/g, ' ');
+            const idNums = remaining.match(/\d{3,7}/g);
+            if (idNums) {
+                result.ids = idNums.map(n => parseInt(n, 10));
+                remaining = remaining.replace(/\d{3,7}/g, ' ');
+            }
+
+            const deptNames = Object.keys(DEPT_CARDS).map(v => v.split(' ').slice(1).join(' '));
+            const deptHit = deptNames.find(name => remaining.includes(name));
+            if (deptHit) {
+                result.dept = deptHit;
+                remaining = remaining.replace(deptHit, ' ');
+            }
+
+            remaining = remaining
+                .replace(/미승인|결재대기|건(?=\s|$)/g, '')
+                .replace(/승인취소|승인\s*처리|승인해\s*줘|승인해|결재해\s*줘|결재해|승인|결재/g, '')
+                .replace(/취소해\s*줘|취소해|반려해\s*줘|반려해|반려|취소/g, '')
+                .replace(/이상|이하/g, '')
+                .replace(/[,，]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            if (remaining) result.content = remaining;
+            return result;
+        }
+
+        // 미승인 상태의 품의 건 중 파싱된 조건(ID/부서/금액/내용)에 맞는 건을 찾는다 (승인/취소 모두 미승인 건만 대상)
+        function findApprovalTargets(parsed) {
+            let candidates = dataset.filter(d => d.status === '미승인');
+
+            if (parsed.ids.length > 0) candidates = candidates.filter(d => parsed.ids.includes(d.id));
+            if (parsed.dept) candidates = candidates.filter(d => d.dept.includes(parsed.dept));
+            if (parsed.amount !== null) {
+                if (parsed.amountOp === '이상') candidates = candidates.filter(d => d.amount >= parsed.amount);
+                else if (parsed.amountOp === '이하') candidates = candidates.filter(d => d.amount <= parsed.amount);
+                else candidates = candidates.filter(d => d.amount === parsed.amount);
+            }
+            if (parsed.content) candidates = candidates.filter(d => storeMatches(d.title, parsed.content) || storeMatches(d.account, parsed.content));
+
+            return candidates;
+        }
+
+        // 챗봇을 통한 승인/승인취소(반려) 명령 처리: 대상을 특정해 최종 확인 대기 상태로 전환한다.
+        // 품의번호를 명시했거나 "전체" 등 일괄 키워드가 있으면 다건이어도 그대로 진행하고,
+        // 그 외(부서/금액/내용) 조건만으로 2건 이상 걸리면 무작위로 처리하지 않고 후보를 제시한다.
+        function handleApprovalCommand(text, actionType) {
+            const parsed = parseApprovalTargetQuery(text);
+            const hasFilter = parsed.ids.length > 0 || parsed.dept || parsed.amount !== null || parsed.content;
+            const actionLabel = actionType === 'approve' ? '승인' : '취소(반려)';
+
+            if (!parsed.bulk && !hasFilter) {
+                addMessage(`처리할 품의 건을 지정해 주세요. 품의번호(예: "1001번 ${actionLabel}"처럼)나 부서·금액·내용 조건, 또는 "전체"를 포함해 다시 요청해 주세요.`, 'system');
+                return;
+            }
+
+            const matches = findApprovalTargets(parsed);
+
+            if (matches.length === 0) {
+                addMessage(`조건에 맞는 미승인 건을 찾지 못했습니다. (이미 승인 완료된 건은 대상이 되지 않습니다.)`, 'system');
+                return;
+            }
+
+            const explicitTarget = parsed.bulk || parsed.ids.length > 0;
+            if (!explicitTarget && matches.length > 1) {
+                const list = matches.slice(0, 8).map(d => `- [${d.id}] ${d.dept} · ${d.account} · ${d.amount.toLocaleString()}원`).join('<br>');
+                addMessage(`조건에 맞는 미승인 건이 ${matches.length}건이라 특정할 수 없습니다. 품의번호를 지정하시거나 "전체"를 포함해 다시 요청해 주세요.<br>${list}`, 'system');
+                return;
+            }
+
+            const list = matches.map(d => `[${d.id}] ${d.dept} · ${d.account} · ${d.amount.toLocaleString()}원`).join(' / ');
+            chatbotState.pendingApprovalAction = { type: actionType, ids: matches.map(d => d.id) };
+            chatbotState.step = 'APPROVAL_CONFIRMATION';
+
+            let msg = `다음 ${matches.length}건을 ${actionLabel} 처리할까요?<br>${list}`;
+            if (matches.length > 1) {
+                const total = matches.reduce((sum, d) => sum + d.amount, 0);
+                msg += `<br>(합계 ${total.toLocaleString()}원)`;
+            }
+            addMessage(msg, 'bot');
+        }
+
+        // 승인/취소 최종 확인 후 실제 처리 실행 (§4.1·§4.2의 UI 승인/승인취소 로직과 동일한 규칙 적용)
+        function executeApprovalAction() {
+            const action = chatbotState.pendingApprovalAction;
+            if (!action) return;
+
+            const targets = dataset.filter(d => action.ids.includes(d.id) && d.status === '미승인');
+            if (targets.length === 0) {
+                addMessage(`대상 건이 이미 처리되었거나 존재하지 않아 실행할 수 없습니다.`, 'system');
+                chatbotState.step = 'IDLE';
+                chatbotState.pendingApprovalAction = null;
+                return;
+            }
+
+            if (action.type === 'approve') {
+                targets.forEach(d => d.status = '승인');
+                renderAll();
+                addMessage(`✅ ${targets.length}건 승인 처리를 완료했습니다. (품의번호: ${targets.map(d => d.id).join(', ')})`, 'bot');
+            } else {
+                const idsToCancel = new Set(targets.map(d => d.id));
+                dataset = dataset.filter(d => !idsToCancel.has(d.id));
+
+                // 취소되지 않고 남아있는 건들이 여전히 참조 중인 카드결제 키는 되돌리지 않는다 (분할 처리로 형제 건이 남아있는 경우 등)
+                const stillReferenced = new Set();
+                dataset.forEach(d => (d.sourceUsageKeys || []).forEach(k => stillReferenced.add(k)));
+
+                targets.forEach(item => {
+                    (item.sourceUsageKeys || []).forEach(k => {
+                        if (!stillReferenced.has(k)) usedCardUsageKeys.delete(k);
+                    });
+                });
+                localStorage.setItem(USED_CARD_USAGE_KEY, JSON.stringify([...usedCardUsageKeys]));
+
+                const checkedCardRadio = document.querySelector('input[name="deptCardSelect"]:checked');
+                if (checkedCardRadio) renderCardUsageTable(checkedCardRadio.value, checkedCardRadio.getAttribute('data-holder'));
+
+                renderAll();
+                addMessage(`🗑 ${targets.length}건 승인취소(반려) 처리를 완료했습니다. (품의번호: ${targets.map(d => d.id).join(', ')})`, 'bot');
+            }
+
+            chatbotState.step = 'IDLE';
+            chatbotState.pendingApprovalAction = null;
+        }
+
+        function sendChatMessage() {
+            const inputEl = document.getElementById('chatbot-input');
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            inputEl.value = '';
+
+            if (isBudgetQuery(text)) {
+                handleBudgetQuery(text);
+                return;
+            }
+
+            if (chatbotState.step !== 'IDLE' && tryHandleAccountChange(text)) {
+                return;
+            }
+
+            if (chatbotState.step === 'IDLE') {
+                if (isCancelCommand(text)) {
+                    handleApprovalCommand(text, 'cancel');
+                } else if (isApprovalCommand(text)) {
+                    handleApprovalCommand(text, 'approve');
+                } else if (isCardCommand(text)) {
+                    handleCardCommand(parseTransactionQuery(text));
+                } else {
+                    addMessage(`💬 "1월 5일 19:15 스타벅스 88000원 품의해줘"처럼 날짜·시간·상호명·금액을 함께 말씀해주시거나, 상단 💳 버튼으로 가상 카드결제를 발생시켜 보세요. 결재 대기 중인 건은 "1001번 승인해줘"처럼 요청하시면 처리해드려요.`, 'system');
+                }
+
+            } else if (chatbotState.step === 'AWAITING_ATTENDEES') {
+                const tx = chatbotState.pendingTransaction;
+                const prop = chatbotState.recommendedProposal;
+                const budget = BUDGET_CODES.find(b => b.value === prop.accountValue);
+
+                const { attendeeText, topic } = parseAttendeeInput(text);
+                prop.attendeeLabel = buildAttendeeLabel(attendeeText);
+                prop.topic = topic;
+                prop.purpose = buildPurposeForAccount(prop.accountValue, prop.attendeeLabel, prop.topic);
+
+                setTimeout(() => {
+                    addMessage(`📝 <b>상세 품의안 작성이 완료되었습니다.</b><br>
+                    - 부서: ${tx.deptName}<br>
+                    - 계정: ${budget.name}<br>
+                    - 사유: ${prop.purpose}<br>
+                    - 금액: ${tx.amount.toLocaleString()}원<br><br>
+                    이대로 최종 품의 상신을 올릴까요? (<b>'응'</b> 또는 <b>'확인'</b> 입력)`, 'bot');
+                    chatbotState.step = 'CONFIRMATION';
+                }, 600);
+
+            } else if (chatbotState.step === 'CONFIRMATION') {
+                if (/(응|웅|넹|넵|네|확인|어|오케이|okay|ok|yes|ㅇㅇ|ㅇ케이)/i.test(text)) {
+                    const tx = chatbotState.pendingTransaction;
+                    const prop = chatbotState.recommendedProposal;
+
+                    if (!validateDocDate()) {
+                        addMessage(`품의일자 조건(월/수/금, 23일 제외)을 만족하지 않아 상신할 수 없습니다. 상단 [품의일자]를 먼저 수정한 뒤 다시 시도해 주세요.`, 'system');
+                        chatbotState.step = 'IDLE';
+                        return;
+                    }
+
+                    // buildLedgerEntries가 예산 분할/한도초과 확인(alert/confirm)까지 처리한다 (submitForm과 동일 로직)
+                    const entries = buildLedgerEntries(prop.accountValue, tx.amount);
+                    if (!entries) {
+                        addMessage(`예산 부족 등의 사유로 상신이 취소되었습니다.`, 'system');
+                        chatbotState.step = 'IDLE';
+                        return;
+                    }
+
+                    const docDate = document.getElementById('docDate').value;
+                    let nextId = dataset.length > 0 ? Math.max(...dataset.map(d => d.id)) + 1 : 1001;
+                    const issuedIds = [];
+                    entries.forEach(entry => {
+                        dataset.unshift({
+                            id: nextId,
+                            dept: tx.deptName,
+                            date: docDate,
+                            title: buildPurposeForAccount(entry.account, prop.attendeeLabel, prop.topic),
+                            amount: entry.amount,
+                            account: entry.account,
+                            status: "미승인",
+                            sourceUsageKeys: tx.usageKey ? [tx.usageKey] : []
+                        });
+                        issuedIds.push(nextId);
+                        nextId++;
+                    });
+
+                    renderAll();
+
+                    // 이 카드결제 건도 "사용됨" 처리해서 카드 사용내역 목록/챗봇 검색에서 제외
+                    if (tx.usageKey) markCardUsageUsed(tx.usageKey);
+                    const checkedCardRadio = document.querySelector('input[name="deptCardSelect"]:checked');
+                    if (checkedCardRadio && checkedCardRadio.value === tx.cardNumber) {
+                        renderCardUsageTable(checkedCardRadio.value, checkedCardRadio.getAttribute('data-holder'));
+                    }
+
+                    setTimeout(() => {
+                        addMessage(`🎉 <b>품의 상신이 완료되었습니다!</b><br>결재 대기 번호: <b>${issuedIds.join(', ')}</b><br>[4. 지출품의 승인] 탭에서 확인할 수 있습니다.`, 'bot');
+                        chatbotState.step = 'IDLE';
+                        chatbotState.pendingTransaction = null;
+                        chatbotState.recommendedProposal = null;
+                    }, 600);
+                } else {
+                    setTimeout(() => {
+                        addMessage(`취소되었습니다. 처음부터 다시 시작하려면 상단 버튼을 눌러주세요.`, 'bot');
+                        chatbotState.step = 'IDLE';
+                        chatbotState.pendingTransaction = null;
+                        chatbotState.recommendedProposal = null;
+                    }, 500);
+                }
+
+            } else if (chatbotState.step === 'APPROVAL_CONFIRMATION') {
+                if (/(응|웅|넹|넵|네|확인|어|오케이|okay|ok|yes|ㅇㅇ|ㅇ케이)/i.test(text)) {
+                    executeApprovalAction();
+                } else {
+                    addMessage(`처리를 취소했습니다.`, 'bot');
+                    chatbotState.step = 'IDLE';
+                    chatbotState.pendingApprovalAction = null;
+                }
+            }
+        }
+
+        function addMessage(text, sender) {
+            const msgContainer = document.getElementById('chatbot-messages');
+            const msgDiv = document.createElement('div');
+
+            if (sender === 'user') {
+                msgDiv.className = "bg-indigo-600 text-white p-3 rounded-2xl rounded-tr-none max-w-[85%] self-end shadow-sm text-right ml-auto";
+            } else if (sender === 'system') {
+                msgDiv.className = "bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-xl max-w-[95%] text-xs text-center mx-auto shadow-inner";
+            } else {
+                msgDiv.className = "bg-white border border-slate-200 text-slate-700 p-3 rounded-2xl rounded-tl-none max-w-[85%] shadow-sm";
+            }
+
+            msgDiv.innerHTML = text;
+            msgContainer.appendChild(msgDiv);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+    </script>
+</body>
+</html>
