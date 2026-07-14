@@ -1,0 +1,1322 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "iMAX Unified Agent API",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Api V1 Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assistant/messages": {
+      "post": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Assistant Message",
+        "operationId": "assistant_message_api_v1_assistant_messages_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "stage, route, clarification, result, error 이벤트를 전달하는 SSE 스트림",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantResult"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Get Session",
+        "operationId": "get_session_api_v1_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Session Api V1 Sessions  Session Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge/query": {
+      "post": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Knowledge Query",
+        "operationId": "knowledge_query_api_v1_knowledge_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Knowledge Query Api V1 Knowledge Query Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/query": {
+      "post": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Data Query",
+        "operationId": "data_query_api_v1_data_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Data Query Api V1 Data Query Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/export": {
+      "post": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Data Export",
+        "operationId": "data_export_api_v1_data_export_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/catalog": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Data Catalog",
+        "operationId": "data_catalog_api_v1_data_catalog_get",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "branch_manager",
+              "title": "Role"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Data Catalog Api V1 Data Catalog Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/expenses/overview": {
+      "get": {
+        "tags": [
+          "expenses"
+        ],
+        "summary": "Expense Overview",
+        "operationId": "expense_overview_api_v1_expenses_overview_get",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sessionid"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "branch_manager",
+              "title": "Role"
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Branchid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Expense Overview Api V1 Expenses Overview Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/expenses/actions": {
+      "post": {
+        "tags": [
+          "expenses"
+        ],
+        "summary": "Expense Action",
+        "operationId": "expense_action_api_v1_expenses_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpenseActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Expense Action Api V1 Expenses Actions Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/expenses/evidence": {
+      "post": {
+        "tags": [
+          "expenses"
+        ],
+        "summary": "Expense Evidence",
+        "operationId": "expense_evidence_api_v1_expenses_evidence_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_expense_evidence_api_v1_expenses_evidence_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Expense Evidence Api V1 Expenses Evidence Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AssistantRequest": {
+        "properties": {
+          "sessionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sessionid"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Role",
+            "default": "branch_manager"
+          },
+          "branchId": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Branchid",
+            "default": 1
+          },
+          "workspaceHint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "knowledge",
+                  "data",
+                  "expense"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspacehint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "AssistantRequest"
+      },
+      "AssistantResult": {
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Sessionid"
+          },
+          "userMessageId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usermessageid"
+          },
+          "messageId": {
+            "type": "string",
+            "title": "Messageid"
+          },
+          "workspace": {
+            "type": "string",
+            "enum": [
+              "knowledge",
+              "data",
+              "expense",
+              "clarification"
+            ],
+            "title": "Workspace"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "payload": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/KnowledgePayload"
+              },
+              {
+                "$ref": "#/components/schemas/DataPayload"
+              },
+              {
+                "$ref": "#/components/schemas/ExpensePayload"
+              },
+              {
+                "$ref": "#/components/schemas/ClarificationPayload"
+              }
+            ],
+            "title": "Payload",
+            "discriminator": {
+              "propertyName": "kind",
+              "mapping": {
+                "clarification": "#/components/schemas/ClarificationPayload",
+                "data": "#/components/schemas/DataPayload",
+                "expense": "#/components/schemas/ExpensePayload",
+                "knowledge": "#/components/schemas/KnowledgePayload"
+              }
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "sessionId",
+          "messageId",
+          "workspace",
+          "answer",
+          "payload"
+        ],
+        "title": "AssistantResult"
+      },
+      "Body_expense_evidence_api_v1_expenses_evidence_post": {
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Sessionid"
+          },
+          "confirmationToken": {
+            "type": "string",
+            "title": "Confirmationtoken"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "branch_manager"
+          },
+          "branchId": {
+            "type": "integer",
+            "title": "Branchid",
+            "default": 1
+          },
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sessionId",
+          "confirmationToken",
+          "file"
+        ],
+        "title": "Body_expense_evidence_api_v1_expenses_evidence_post"
+      },
+      "BudgetItem": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "allocated": {
+            "type": "integer",
+            "title": "Allocated"
+          },
+          "used": {
+            "type": "integer",
+            "title": "Used"
+          },
+          "remaining": {
+            "type": "integer",
+            "title": "Remaining"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "code",
+          "name",
+          "allocated",
+          "used",
+          "remaining"
+        ],
+        "title": "BudgetItem"
+      },
+      "Citation": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "section": {
+            "type": "string",
+            "title": "Section"
+          },
+          "excerpt": {
+            "type": "string",
+            "title": "Excerpt"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "section",
+          "excerpt",
+          "score"
+        ],
+        "title": "Citation"
+      },
+      "ClarificationOption": {
+        "properties": {
+          "workspace": {
+            "type": "string",
+            "enum": [
+              "knowledge",
+              "data",
+              "expense"
+            ],
+            "title": "Workspace"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workspace",
+          "label"
+        ],
+        "title": "ClarificationOption"
+      },
+      "ClarificationPayload": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "clarification",
+            "title": "Kind",
+            "default": "clarification"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ClarificationOption"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "options"
+        ],
+        "title": "ClarificationPayload"
+      },
+      "DataPayload": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "data",
+            "title": "Kind",
+            "default": "data"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "columnMetadata": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Columnmetadata"
+          },
+          "rows": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "rowCount": {
+            "type": "integer",
+            "title": "Rowcount"
+          },
+          "sql": {
+            "type": "string",
+            "title": "Sql"
+          },
+          "generatedSql": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generatedsql"
+          },
+          "executionMs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executionms"
+          },
+          "validation": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Validation"
+          },
+          "metrics": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Metrics"
+          },
+          "tables": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Tables"
+          },
+          "executionTrace": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Executiontrace"
+          },
+          "conversationContext": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Conversationcontext"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "answer",
+          "explanation",
+          "columns",
+          "rows",
+          "rowCount",
+          "sql"
+        ],
+        "title": "DataPayload"
+      },
+      "DataQueryRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "branch_manager"
+          },
+          "branchId": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Branchid",
+            "default": 1
+          },
+          "sessionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sessionid"
+          },
+          "conversationContext": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Conversationcontext"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "DataQueryRequest"
+      },
+      "ExpenseActionRequest": {
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Sessionid"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "confirm",
+              "reject"
+            ],
+            "title": "Action"
+          },
+          "confirmationToken": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmationtoken"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 8,
+            "title": "Idempotencykey"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "branch_manager"
+          },
+          "branchId": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Branchid",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "sessionId",
+          "action",
+          "idempotencyKey"
+        ],
+        "title": "ExpenseActionRequest"
+      },
+      "ExpenseItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "dept": {
+            "type": "string",
+            "title": "Dept"
+          },
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "amount": {
+            "type": "integer",
+            "title": "Amount"
+          },
+          "account": {
+            "type": "string",
+            "title": "Account"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "sourceUsageKeys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sourceusagekeys"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "dept",
+          "date",
+          "title",
+          "amount",
+          "account",
+          "status"
+        ],
+        "title": "ExpenseItem"
+      },
+      "ExpenseOverview": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExpenseItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "budgets": {
+            "items": {
+              "$ref": "#/components/schemas/BudgetItem"
+            },
+            "type": "array",
+            "title": "Budgets"
+          },
+          "pendingCount": {
+            "type": "integer",
+            "title": "Pendingcount"
+          },
+          "approvedCount": {
+            "type": "integer",
+            "title": "Approvedcount"
+          },
+          "pendingAction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingExpenseAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "budgets",
+          "pendingCount",
+          "approvedCount"
+        ],
+        "title": "ExpenseOverview"
+      },
+      "ExpensePayload": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "expense",
+            "title": "Kind",
+            "default": "expense"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "overview": {
+            "$ref": "#/components/schemas/ExpenseOverview"
+          },
+          "created": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "overview"
+        ],
+        "title": "ExpensePayload"
+      },
+      "ExportRequest": {
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Sessionid"
+          },
+          "exportType": {
+            "type": "string",
+            "enum": [
+              "csv",
+              "report"
+            ],
+            "title": "Exporttype",
+            "default": "csv"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "branch_manager"
+          },
+          "branchId": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Branchid",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "sessionId"
+        ],
+        "title": "ExportRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "KnowledgePayload": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "knowledge",
+            "title": "Kind",
+            "default": "knowledge"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "type": "array",
+            "title": "Citations"
+          },
+          "generationEngine": {
+            "type": "string",
+            "title": "Generationengine"
+          },
+          "llmModel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llmmodel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "answer",
+          "citations",
+          "generationEngine"
+        ],
+        "title": "KnowledgePayload"
+      },
+      "KnowledgeRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "sessionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sessionid"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "branch_manager"
+          },
+          "branchId": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Branchid",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "KnowledgeRequest"
+      },
+      "PendingExpenseAction": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "create",
+              "approve",
+              "cancel"
+            ],
+            "title": "Type"
+          },
+          "itemIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Itemids"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Items"
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "type"
+        ],
+        "title": "PendingExpenseAction"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

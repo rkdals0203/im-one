@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>iMAX</title>
+<style>
+  :root {
+    /* iM증권 브랜드 색(청록/민트 그라데이션)에 맞춘 팔레트 */
+    --accent: #00A99A; --accent-dark: #00786E; --accent-soft: #E3F6F3;
+    --bg: #F2F7F6; --panel: #fff; --border: #E1EAE8;
+    --text: #1C2625; --sub: #647572;
+    --ok: #22C55E; --warn: #F59E0B; --idle: #9CA3AF;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    height: 100vh; display: flex;
+  }
+
+  #sidebar {
+    width: 280px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; transition: width .18s ease;
+  }
+  #sidebar .brand { padding: 18px 6px; border-bottom: 1px solid var(--border); }
+  #sidebar .brand-row { display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
+  #sidebar .brand-logo-full { height: 38px; width: auto; display: block; transform: translateX(-6px); }
+  /* 접힌 사이드바에서는 로고 전체 대신 왼쪽 아이콘 부분만 잘라서 보여준다
+     (같은 이미지를 확대해 폭이 좁은 오버플로우 숨김 박스 안에 왼쪽 정렬) */
+  #sidebar .brand-logo-icon { display: none; width: 42px; height: 26px; overflow: hidden; flex-shrink: 0; }
+  #sidebar .brand-logo-icon img { height: 26px; width: auto; display: block; }
+  #sidebar .brand p { font-size: 12px; color: var(--sub); margin: 0; line-height: 1.4; text-align: center; }
+
+  #cards {
+    display: flex; flex-direction: column; gap: 12px;
+    padding: 16px; flex: 1; overflow-y: auto;
+  }
+  .card {
+    border: 1.5px solid var(--border); border-radius: 12px; padding: 14px;
+    cursor: pointer; background: #fff; transition: border-color .15s, box-shadow .15s;
+    display: flex; flex-direction: column; gap: 8px; position: relative;
+  }
+  .card:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(0,169,154,.14); }
+  .card.active { border-color: var(--accent); background: var(--accent-soft); }
+  .card .top-row { display: flex; align-items: center; justify-content: space-between; }
+  .card .icon { font-size: 22px; }
+  .card .title { font-size: 13px; font-weight: 600; margin: 0; }
+  .title-break { display: none; }
+  .pill {
+    font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .pill.idle { background: #F1F3F3; color: var(--idle); }
+  .pill.starting { background: #FEF3C7; color: #92400E; }
+  .pill.ready { background: var(--accent-soft); color: var(--accent-dark); }
+
+  /* 모듈을 한 번 선택하면 설명 문구는 없애고 아이콘+제목 위주의 좁은 사이드바로
+     접어서 오른쪽 실행 화면을 더 넓게 쓴다. 처음엔 항상 펼친 상태로 시작한다. */
+  #sidebar.collapsed { width: 108px; }
+  #sidebar.collapsed .brand { padding: 16px 10px; }
+  #sidebar.collapsed .brand-row { justify-content: center; margin-bottom: 0; }
+  #sidebar.collapsed .brand-logo-full { display: none; }
+  #sidebar.collapsed .brand-logo-icon { display: block; }
+  #sidebar.collapsed .brand p { display: none; }
+  #sidebar.collapsed #cards { padding: 14px 8px; }
+  #sidebar.collapsed .card { padding: 10px 6px; align-items: center; }
+  #sidebar.collapsed .card .top-row { flex-direction: column-reverse; gap: 6px; }
+  #sidebar.collapsed .card .title {
+    font-size: 11px; text-align: center; white-space: normal; line-height: 1.3; margin: 0;
+  }
+  #sidebar.collapsed .title-break { display: inline; }
+  #sidebar.collapsed .pill-text { display: none; }
+  #sidebar.collapsed .pill { padding: 0; width: 9px; height: 9px; border-radius: 50%; }
+  #sidebar.collapsed .pill .dot { width: 100%; height: 100%; }
+  #sidebarToggle {
+    border: none; background: transparent; color: var(--sub); cursor: pointer;
+    font-size: 13px; padding: 10px; text-align: center; border-top: 1px solid var(--border);
+    white-space: nowrap; overflow: hidden;
+  }
+  #sidebarToggle:hover { color: var(--accent); }
+  #sidebar.collapsed #sidebarToggle .toggle-label { display: none; }
+
+  #main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #frameHeader {
+    padding: 10px 24px; background: var(--panel); border-bottom: 1px solid var(--border);
+    font-size: 13px; color: #374151; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  #frameHeader .status { display: flex; align-items: center; gap: 8px; }
+  #frame-wrap { flex: 1; position: relative; }
+  iframe { width: 100%; height: 100%; border: none; }
+  #placeholder {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--sub); font-size: 20px; font-weight: 600; flex-direction: column; gap: 12px; text-align: center; padding: 24px;
+  }
+  #placeholder .big { font-size: 40px; }
+  #errBar {
+    display: none; padding: 8px 24px; background: #FEE2E2; color: #991B1B; font-size: 12px;
+  }
+
+  /* 첫 페이지 전용 랜딩 화면 (Genspark 워크스페이스 스타일 참고) — 모듈을 하나
+     선택하는 순간 사라지고, 그 이후로는 기존 사이드바+실행화면 레이아웃만 쓴다. */
+  body.landing #sidebar, body.landing #main { display: none; }
+  body:not(.landing) #landing { display: none; }
+  #landing {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: 64px 24px; overflow-y: auto;
+  }
+  #landing .landing-logo { height: 56px; width: auto; margin-bottom: 16px; }
+  #landing .landing-tagline { font-size: 14px; color: var(--sub); margin: 0 0 36px; text-align: center; }
+  .landing-search {
+    width: 100%; max-width: 640px; background: var(--panel); border: 1.5px solid var(--border);
+    border-radius: 16px; box-shadow: 0 2px 14px rgba(0,0,0,.05); padding: 18px 22px; margin-bottom: 48px;
+  }
+  .landing-search input {
+    width: 100%; border: none; outline: none; background: transparent;
+    font-size: 15px; color: var(--text); cursor: default;
+  }
+  .landing-search input::placeholder { color: var(--idle); }
+  .landing-groups { display: flex; align-items: flex-start; gap: 40px; flex-wrap: wrap; justify-content: center; }
+  .landing-divider { width: 1px; align-self: stretch; background: var(--border); }
+  .landing-group-label { font-size: 12px; color: var(--sub); font-weight: 600; margin-bottom: 16px; text-align: center; }
+  .landing-group-icons { display: flex; gap: 28px; }
+  .landing-icon-btn {
+    border: none; background: none; cursor: pointer; display: flex; flex-direction: column;
+    align-items: center; gap: 10px; width: 84px; font-family: inherit;
+  }
+  .landing-icon-btn .circle {
+    width: 52px; height: 52px; border-radius: 16px; background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center; font-size: 24px;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .landing-icon-btn:hover .circle { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,169,154,.25); }
+  .landing-icon-btn span { font-size: 12px; color: var(--text); line-height: 1.3; }
+  .landing-icon-btn.planned .circle { background: #F1F3F3; }
+</style>
+</head>
+<body class="landing">
+  <div id="landing">
+    <img class="landing-logo" src="/static/title.png" alt="iMAX" />
+    <p class="landing-tagline">사내 업무 효율을 위한 하나의 통합 창구</p>
+    <div class="landing-search"><input type="text" placeholder="필요한 업무를 검색하거나 아래에서 선택해보세요" readonly></div>
+    <div class="landing-groups">
+      <div class="landing-group">
+        <div class="landing-group-label">핵심 업무</div>
+        <div class="landing-group-icons">
+          <button class="landing-icon-btn" data-key="1"><span class="circle">📚</span><span>AI 지식정보 저장소</span></button>
+          <button class="landing-icon-btn" data-key="2"><span class="circle">🗄️</span><span>NL2SQL 데이터 추출</span></button>
+          <button class="landing-icon-btn" data-key="3"><span class="circle">🧾</span><span>지출품의 자동화</span></button>
+        </div>
+      </div>
+      <div class="landing-divider"></div>
+      <div class="landing-group">
+        <div class="landing-group-label">확장 영역</div>
+        <div class="landing-group-icons">
+          <button class="landing-icon-btn planned" data-key="4"><span class="circle">👥</span><span>CRM</span></button>
+          <button class="landing-icon-btn planned" data-key="5"><span class="circle">💳</span><span>전자결제</span></button>
+          <button class="landing-icon-btn planned" data-key="6"><span class="circle">🧩</span><span>지속확장</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div class="brand">
+      <div class="brand-row">
+        <img class="brand-logo-full" src="/static/title.png" alt="iMAX" />
+        <span class="brand-logo-icon"><img src="/static/title.png" alt="iMAX" /></span>
+      </div>
+      <p>사내 업무 효율을 위한 하나의 통합 창구<br>좌측 메뉴를 클릭하면 자동으로 실행되고,<br>오른쪽 화면에 바로 표시됩니다.</p>
+    </div>
+    <div id="cards">
+      <div class="card" data-key="1" title="1. AI 지식정보 저장소 — 채권/회의실 매뉴얼 Q&amp;A (Flask, 키워드 검색)">
+        <div class="top-row"><span class="icon">📚</span><span class="pill idle" data-pill="1"><span class="dot"></span><span class="pill-text">대기</span></span></div>
+        <p class="title">1. AI 지식정보 저장소</p>
+      </div>
+      <div class="card" data-key="2" title="2. NL2SQL 데이터 추출 — 자연어 질문 → SQL 생성/검증/실행 (LangGraph)">
+        <div class="top-row"><span class="icon">🗄️</span><span class="pill idle" data-pill="2"><span class="dot"></span><span class="pill-text">대기</span></span></div>
+        <p class="title">2. NL2SQL <br class="title-break">데이터 추출</p>
+      </div>
+      <div class="card" data-key="3" title="3. 지출품의 자동화 — 가상 카드결제 감지 → 지출품의 초안/승인 (Streamlit)">
+        <div class="top-row"><span class="icon">🧾</span><span class="pill idle" data-pill="3"><span class="dot"></span><span class="pill-text">대기</span></span></div>
+        <p class="title">3. 지출품의 <br class="title-break">자동화</p>
+      </div>
+      <div class="card" data-key="4" title="4. CRM — 지속 확장 영역 (준비 중)">
+        <div class="top-row"><span class="icon">👥</span><span class="pill idle"><span class="dot"></span><span class="pill-text">확장 예정</span></span></div>
+        <p class="title">4. CRM</p>
+      </div>
+      <div class="card" data-key="5" title="5. 전자결제 — 지속 확장 영역 (준비 중)">
+        <div class="top-row"><span class="icon">💳</span><span class="pill idle"><span class="dot"></span><span class="pill-text">확장 예정</span></span></div>
+        <p class="title">5. 전자결제</p>
+      </div>
+      <div class="card" data-key="6" title="6. 지속확장 — 지속 확장 영역 (준비 중)">
+        <div class="top-row"><span class="icon">🧩</span><span class="pill idle"><span class="dot"></span><span class="pill-text">확장 예정</span></span></div>
+        <p class="title">6. 지속확장</p>
+      </div>
+    </div>
+    <button id="sidebarToggle" title="사이드바 펼치기/접기">≡ <span class="toggle-label">메뉴</span></button>
+  </div>
+
+  <div id="main">
+    <div id="frameHeader">
+      <div class="status">
+        <span id="statusText"></span>
+      </div>
+    </div>
+    <div id="errBar"></div>
+    <div id="frame-wrap">
+      <div id="placeholder"><div class="big">🖱️</div>왼쪽에서 필요한 업무를 선택해주세요</div>
+      <iframe id="appFrame" style="display:none"></iframe>
+    </div>
+  </div>
+
+<script>
+const cards = document.querySelectorAll('.card');
+const sidebar = document.getElementById('sidebar');
+const sidebarToggle = document.getElementById('sidebarToggle');
+const frame = document.getElementById('appFrame');
+const placeholder = document.getElementById('placeholder');
+const statusText = document.getElementById('statusText');
+const errBar = document.getElementById('errBar');
+
+// 1~3번만 실제 백엔드 모듈과 연동된다. 4~6번은 아직 실제 기능이 없는,
+// 나중에 채워 넣을 확장 자리표시자 카드다.
+const PLANNED_MODULES = {
+  "4": { name: "4. CRM" },
+  "5": { name: "5. 전자결제" },
+  "6": { name: "6. 지속확장" },
+};
+
+function showError(msg) {
+  errBar.textContent = msg;
+  errBar.style.display = 'block';
+  setTimeout(() => { errBar.style.display = 'none'; }, 4000);
+}
+
+function setPill(key, state) {
+  const pill = document.querySelector(`[data-pill="${key}"]`);
+  pill.className = 'pill ' + state;
+  const label = state === 'ready' ? '실행 중' : state === 'starting' ? '기동 중' : '대기';
+  pill.innerHTML = `<span class="dot"></span><span class="pill-text">${label}</span>`;
+}
+
+function collapseSidebar() {
+  sidebar.classList.add('collapsed');
+}
+
+sidebarToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+
+function setActive(key) {
+  cards.forEach(c => c.classList.toggle('active', c.dataset.key === key));
+}
+
+async function pollUntilReady(key, port, name, desc, embeddable) {
+  setPill(key, 'starting');
+  statusText.textContent = `${name} 기동 중... (127.0.0.1:${port})`;
+  for (let i = 0; i < 60; i++) {
+    const res = await fetch(`/api/status/${key}`);
+    const data = await res.json();
+    if (data.ready) {
+      setPill(key, 'ready');
+      const url = `http://127.0.0.1:${port}/`;
+      if (embeddable) {
+        statusText.textContent = `${name} — ${desc}`;
+        placeholder.style.display = 'none';
+        frame.style.display = 'block';
+        // 캐시 우회용 쿼리 파라미터 — 모듈 서버가 보안 헤더(CSP 등)를 바꿔도
+        // 브라우저가 예전 응답을 캐시해서 계속 쓰는 일이 없도록 매번 새 URL로 로드한다.
+        frame.src = `${url}?_cb=${Date.now()}`;
+      } else {
+        // 이 모듈은 CSP frame-ancestors로 이 런처 출처 외의 임베딩을 차단하므로,
+        // 같은 탭에서 직접 이동한다 (런처 화면은 뒤로가기로 복귀).
+        window.location.href = url;
+      }
+      return;
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  setPill(key, 'idle');
+  showError(`${name} 기동이 오래 걸리고 있어요. 터미널에서 직접 실행해 에러를 확인해주세요.`);
+}
+
+function showPlannedPlaceholder(mod) {
+  frame.style.display = 'none';
+  frame.src = '';
+  placeholder.style.display = 'flex';
+  placeholder.innerHTML =
+    `<div class="big">🧩</div>${mod.name} — 지속 확장 영역입니다.<br>추후 이 자리에 실제 기능이 연동될 예정입니다.`;
+  statusText.textContent = `${mod.name} — 지속 확장 영역`;
+}
+
+async function selectModule(key) {
+  setActive(key);
+  collapseSidebar();
+
+  if (PLANNED_MODULES[key]) {
+    showPlannedPlaceholder(PLANNED_MODULES[key]);
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: key }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showError(data.error || '알 수 없는 오류');
+      return;
+    }
+    pollUntilReady(data.key, data.port, data.name, data.desc, data.embeddable);
+  } catch (e) {
+    showError('런처 서버에 연결할 수 없습니다.');
+  }
+}
+
+cards.forEach(card => {
+  card.addEventListener('click', () => selectModule(card.dataset.key));
+});
+
+// 첫 페이지(랜딩)에서 아이콘을 클릭하면 랜딩 화면을 벗어나 기존 사이드바+실행화면
+// 레이아웃으로 전환한다. 그 이후로는 사이드바 카드와 완전히 동일하게 동작한다.
+document.querySelectorAll('.landing-icon-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.body.classList.remove('landing');
+    selectModule(btn.dataset.key);
+  });
+});
+</script>
+</body>
+</html>

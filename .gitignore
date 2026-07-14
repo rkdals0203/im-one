@@ -6,11 +6,26 @@ __pycache__/
 .mypy_cache/
 .venv/
 venv/
+node_modules/
 dist/
 build/
 *.egg-info/
+.coverage
+coverage/
+playwright-report/
+test-results/
 
 # Local demo artifacts
-data/*.sqlite
-logs/*.jsonl
+**/data/*.sqlite
+**/data/*.sqlite-*
+**/data/*.lock
+**/logs/*.jsonl
+uploads/
 .env
+**/.env
+.env.*
+!.env.example
+**/.DS_Store
+
+# Pre-unification local runtime folders left outside Git during migration.
+nl2sql/
