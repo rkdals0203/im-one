@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "langgraph>=1.0.0",
+  "sqlglot>=25.0.0",
   "typing-extensions>=4.12.0",
 ]
 
@@ -16,6 +17,14 @@ dev = [
 
 [project.scripts]
 im-one-agent = "im_one_agent.cli:main"
+im-one-agent-web = "im_one_agent.web:main"
+im-one-agent-evaluate = "im_one_agent.evaluate:main"
+im-one-agent-evidence = "im_one_agent.evidence:main"
+im-one-agent-preflight = "im_one_agent.preflight:main"
+im-one-agent-generate-data = "im_one_agent.generate_demo_data:main"
+
+[tool.setuptools.package-data]
+im_one_agent = ["static/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

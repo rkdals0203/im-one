@@ -12,5 +12,6 @@ build/
 
 # Local demo artifacts
 data/*.sqlite
+data/*.lock
 logs/*.jsonl
 .env

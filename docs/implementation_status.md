@@ -1,0 +1,421 @@
+# iM One NL2SQL PRD Implementation Status
+
+Updated: 2026-07-09
+
+## Implemented
+
+- LLM-only SQL generation path in the agent workflow.
+- Runtime SQL generation code no longer contains a verified/deterministic SQL fixture helper; gold SQL remains confined to the evaluation harness, while production `generate_sql` delegates only to the configured LLM path.
+- Installed LangGraph runtime is verified by test; the agent builds a compiled `StateGraph` with an explicit `question_intake` node rather than the sequential compatibility runner in the project `.venv`.
+- Pre-LLM intent guard blocks unsafe requests before model generation for DB mutations, raw/private customer detail requests, raw data dumps, investment-advice requests, and plain-language buy/sell/product-recommendation requests.
+- LLM generation failure is handled as a blocked execution state, not as a server crash.
+- LLM generation failure responses now include user-facing retry guidance covering API key, model, base URL, network, and question-specificity checks.
+- LLM response shape requires exactly `sql`, `reason`, and `assumptions`; responses that are not JSON objects, include extra keys, miss any required key, return non-string SQL/reason, empty SQL/reason, non-array assumptions, or non-string items inside the assumptions array are treated as generation failures.
+- LLM-returned SQL is not silently normalized before validation; even a trailing semicolon remains in the generated SQL so the SQL Validation Layer can block it and audit the original model output.
+- LLM payloads include an explicit response contract for `sql`, `reason`, and string-array `assumptions`, and preflight/evidence checks verify that contract before live LLM gates are trusted.
+- LLM calls use a required `IM_ONE_LLM_TIMEOUT` safety budget with a 10-second default aligned to the POC response-time target.
+- LLM generation can target an explicitly configured localhost OpenAI-compatible runtime without an API key when `IM_ONE_LLM_ALLOW_LOCAL_NO_AUTH=1`; remote endpoints still require credentials.
+- CLI, Web, evaluation, preflight, and evidence entrypoints load project `.env` files automatically without overwriting already-exported shell values, so approved LLM settings can be supplied consistently through `.env` or `IM_ONE_ENV_FILE`.
+- SQL validation extracts an internal `QueryAst` and blocks DML/DDL, unknown tables, comments, semicolons, missing/large LIMIT, and `SELECT *`.
+- SQL validation only accepts top-level final-result `LIMIT`/`OFFSET` clauses; limits inside CTE bodies do not satisfy the final query row-limit requirement.
+- SQL validation masks single-quoted SQL string literals before policy-pattern extraction, so literal values containing words like `DROP`, `UNION`, `readfile`, or table-like text do not create false table/keyword matches.
+- SQL validation runs the required `sqlglot` SQLite parser check as part of the PRD validation path.
+- SQL validation runs SQLite execution-plan checks before execution when a database connection is available, catching syntax errors and unknown columns.
+- SQL validation extracts quoted SQLite table identifiers (`"table"`, `` `table` ``, `[table]`) for whitelist, operational-table, and branch-scope checks, preventing quoted table references from bypassing policy.
+- SQL validation blocks direct row-level surrogate identifier selection such as `account_id`, `sale_id`, `case_id`, and `review_id`.
+- SQL validation blocks non-aggregate row-level detail queries against customer/transaction event tables unless the query uses an aggregate function or `GROUP BY`.
+- SQL validation also blocks mixed aggregate queries that select raw event-detail columns without an explicit `GROUP BY`.
+- SQL validation blocks known query-explosion join patterns including `CROSS JOIN`, `JOIN ... ON 1=1`/`ON TRUE`, and implicit comma joins before execution.
+- SQL validation blocks `WITH RECURSIVE` queries before execution to reduce long-running recursive CTE risk.
+- SQL validation blocks compound set operations (`UNION`, `INTERSECT`, `EXCEPT`) before execution so generated queries stay within a single explainable lookup flow.
+- SQL validation blocks SQLite file/extension functions such as `load_extension`, `readfile`, and `writefile` before execution.
+- SQL validation blocks non-positive `LIMIT`, excessive `OFFSET`, and expensive `ORDER BY RANDOM()` patterns before execution.
+- SQL validation blocks nested subqueries and requires complex intermediate logic to be expressed as named `WITH` CTEs, keeping schema/table/branch-scope validation explainable.
+- SQL validation blocks direct user queries against operational-only audit/control tables such as `query_audit_log`, even if a caller accidentally includes them in `allowed_tables`.
+- `branch_manager` queries require a `branch_id` scope predicate before execution and block `OR` or mismatched `branch_id` predicates that can widen the branch scope.
+- For supported simple generated `SELECT` queries, `branch_manager` scope is applied server-side by injecting the normalized `branch_id` predicate before validation; risky `OR`, nested SELECT, `WITH`, or conflicting branch predicates are left to validation and blocked if unsafe.
+- Branch-scope SQL injection uses the same string-literal masking as validation when finding `WHERE`/`GROUP BY`/`ORDER BY`/`LIMIT`, so literal values containing SQL-like text do not corrupt the generated SQL.
+- `branch_manager` validation now checks branch-scoped table aliases and branch_id join paths, blocking joined tables that are not connected to the permitted branch scope.
+- Branch-scope validation explicitly covers the `branch_targets` goal table used by target-vs-actual questions, including automatic scope injection and disconnected-join blocking.
+- Unknown or empty user roles are normalized to the most restrictive `branch_manager` role before schema retrieval, SQL generation, validation, API response, and audit logging.
+- Branch scope IDs are normalized server-side to known demo branch IDs before LLM prompting, SQL validation, API response, and audit logging.
+- Schema retrieval excludes metrics whose required tables are outside the normalized user role policy, including follow-up context merges.
+- Schema retrieval now prunes high-confidence questions to the top matched metric so unrelated runner-up tables are not passed into LLM context.
+- Result explanations include interpreted metrics, metric definitions, period criteria, aggregation criteria, filter criteria, schema context, referenced tables, generation reason, assumptions, validation status, concrete validation evidence, and row count.
+- Result explanations explicitly state that the output is based on synthetic POC data and must be reviewed before reporting or decision-making.
+- Empty query results are presented as no matching data rather than as an execution failure in agent text, Web UI table states, mini result preview, and report draft export.
+- Semantic metric definitions now include explicit SQL-style definitions, related columns, date columns, default periods, filters, and join paths.
+- LLM prompts receive the structured semantic metric definitions instead of only metric names/descriptions.
+- LLM payloads now include structured `role_policy`, `selected_schema`, synthetic `dataset_metadata`, and `sql_rules` fields so the model receives the current role boundary, executable selected schema subset, dataset classification, and SQL safety contract explicitly.
+- LLM chat-completions payloads explicitly set deterministic generation parameters (`temperature=0`, `top_p=1`) alongside JSON-object response formatting.
+- LLM payload construction is exposed as a testable contract and operational preflight validates the prompt policy without calling the network.
+- Schema retrieval computes retrieval confidence and clarification options for ambiguous questions, and passes them to explanations, Web/API trace metadata, and LLM payloads.
+- Low-confidence retrieval adds a system-generated interpretation assumption to successful SQL generation results, so ambiguous questions show the applied assumption even if the LLM response omits it.
+- Web UI renders clarification options as clickable chips in the AI panel, so ambiguous questions can be refined into a follow-up run without retyping.
+- High-risk product retrieval includes common business synonyms such as "위험한 상품" and "위험 상품".
+- LLM system prompts explicitly instruct the model to prefer semantic metric definitions, return aggregate analytics by business dimensions, avoid raw event-level detail columns unless grouped, and avoid `UNION`/`INTERSECT`/`EXCEPT` set operations.
+- Result explanations include metric definitions and period criteria for the matched semantic metrics.
+- Fixed-seed synthetic mart generation with:
+  - dataset-level synthetic POC metadata
+  - 10 branches with explicit `합성` branch-name markers
+  - 12 months of account events
+  - 12 months of product sales
+  - 12 months of VOC cases
+  - 12 months of investment review cases
+  - monthly branch targets
+  - query audit table shape
+- Demo data generator CLI is available via `scripts/generate_demo_data.py`, `python -m im_one_agent.generate_demo_data`, and `im-one-agent-generate-data`.
+- Demo data generator can recreate the SQLite mart, export table-level CSV snapshots, and write evaluation gold-result snapshots.
+- Demo data generator includes `demo_dataset_metadata` in SQLite and CSV snapshots, marking the mart as fixed-seed synthetic POC data with no real customer, account, employee, or branch-performance content.
+- Demo data generator CSV snapshots use the shared CSV sanitizer so formula-like headers and string values are neutralized before writing files.
+- Semantic catalog expanded for v2 mart columns and branch target questions.
+- Schema retrieval combines keyword hits, token overlap, and vector similarity.
+- Schema retrieval can use an approved OpenAI-compatible embedding endpoint when `OPENAI_API_KEY` and `IM_ONE_EMBEDDING_MODEL` are configured, can target an explicitly configured localhost embedding runtime without an API key when `IM_ONE_EMBEDDING_ALLOW_LOCAL_NO_AUTH=1`, and otherwise keeps the bundled local vector scoring path.
+- Evaluation harness with 30+ Korean questions, blocked-query cases, and report writer.
+- Evaluation harness now includes 5 follow-up question cases, each tied to a seeded previous gold-SQL result context so multi-turn behavior is evaluated against a realistic prior answer.
+- Evaluation reports include PRD-facing summary metrics for total pass rate, core demo success rate, non-blocked execution success rate, blocked-query rejection rate, and 10-second latency-target success rate.
+- Evaluation diff summaries isolate failed or gold-mismatched cases with missing tables, missing columns, missing SQL fragments, row-count deltas, first mismatch details, issues, generated SQL, and gold SQL for review evidence.
+- Evaluation CLI can write a Markdown scorecard with PRD target metrics, failed cases, and coverage groups for presentation/review evidence.
+- Evaluation CLI supports focused case filters (`--case-group`, `--case-id`, `--blocked-only`, `--non-blocked-only`) so safety, core, follow-up, and full PRD evidence can be generated separately.
+- Evidence pack CLI (`python -m im_one_agent.evidence`) writes readiness, external-readiness, evaluation JSON/Markdown, verified-question, catalog, catalog-governance, manifest, and review-index artifacts into one directory.
+- Evidence pack now copies the run's JSONL audit evidence into `audit_log.jsonl` and summarizes event count/source path in the manifest and review README.
+- Evidence pack now writes `audit_summary.json` using the same grouped audit monitoring payload as `/api/audit-summary`, covering execution status, validation status, role, generation engine, metric, table, and blocked-reason counts.
+- Evidence pack now writes `database_audit_log.json`, snapshotting SQLite `query_audit_log` rows when the database audit table is available.
+- Evidence pack now writes `sql_validation_probes.json`, capturing every SQL Validation Layer probe with expected/actual allow status, issues, referenced tables, and branch-scope evidence.
+- Evidence pack now writes `schema_retrieval_probes.json`, capturing Schema Retrieval probe results with selected tables, matched metrics, confidence, clarification options, retrieval scores, role-policy exclusion, and follow-up context merging.
+- Evidence pack now writes `query_execution_samples.json`, capturing validated SQLite execution samples with column metadata, result rows, empty-result handling, pre-execution row-count checks, query-plan summaries, execution latency, and branch-scoped execution evidence.
+- Evidence pack now writes `role_policy_matrix.json`, capturing role-to-table policy coverage and probes for role-disallowed table blocking, branch-manager scope enforcement, schema-retrieval table exclusion, and operational audit-table blocking.
+- Evidence pack now writes `llm_prompt_contract.json`, capturing the LLM payload contract for selected schema, matched metric definitions, role policy, SQL rules, synthetic dataset metadata, deterministic generation settings, sanitized follow-up context, and the 5 core demo prompt contracts.
+- Evidence pack now writes `live_llm_generation_samples.json`, capturing per-core-question live LLM generation, SQL validation, execution, latency, result-shape, and missing-table/column evidence when `--live-checks` is enabled.
+- Live LLM generation samples execute validated SQL through the same `QueryExecutionBackend` used by the app, recording column metadata, query-plan summary, pre-execution row-count checks, backend execution latency, and runtime execution errors.
+- Live LLM generation samples now include a SHA-256 hash of the exact prompt payload plus response-contract checks, so approved-gateway evidence can be tied back to the prompt contract without storing the full prompt text.
+- Evidence pack now writes `llm_evaluation_diagnostics.json`, summarizing sanitized LLM endpoint readiness, live-generation status, PRD evaluation failures, failure-reason counts, sample failed cases, and exact verification commands for closing the remaining LLM/evaluation gates.
+- Evidence pack now writes `result_explanation_samples.json`, capturing allowed and blocked explanation samples with metric, period, grouping, table, validation, row-count, assumption, and synthetic-data notice coverage.
+- Evidence pack now writes `ui_layout_contract.json`, capturing the home entry flow, desktop workbench grid, result-table scroll safety, AI chat/trace panel, responsive breakpoints, and dynamic result-height calculation.
+- Evidence pack manifest and README now include failed readiness-gate next actions, so demo/pilot reviewers can see the exact external setup items needed to clear remaining PRD gates.
+- Evidence pack writes `external_readiness.json`, separating approved LLM, embedding, trusted-header gateway, read-only replica, API-token, and feedback-store evidence from ordinary local readiness checks.
+- Evidence pack external readiness items now include required environment keys, verification commands, and evidence expectations so reviewers can close approved LLM, embedding, SSO gateway, read-replica, API-token, and feedback-store gates without guessing the setup path.
+- Evidence pack external readiness commands and live-check next-action wording now follow the selected profile, so missing approved LLM gateway evidence in `pilot` points reviewers to `--profile pilot --live-checks --strict`.
+- Evidence pack now writes executable `external_readiness_commands.sh`, deduplicating repeated profile-level checks while preserving per-gate environment-key and evidence-expectation comments.
+- External readiness replay commands preserve the evidence run's DB path, audit path, role, and branch scope, while intentionally dropping focused case filters such as `--blocked-only` so approved-gateway replay generates full PRD evidence.
+- Evidence CLI supports `--strict`, and generated external readiness replay commands use it so required readiness or PRD evaluation gate failures produce a non-zero exit code for automation.
+- Evidence pack manifest and review README now include a single `evidence_gate` result combining readiness failures, missing external readiness, and PRD evaluation threshold failures.
+- Evidence pack now writes `completion_audit.json`, summarizing each mapped PRD requirement's current completion status, checks requiring attention, external evidence gaps, PRD evaluation gate status, and blocking conditions.
+- Completion audit now attaches PRD evaluation-threshold failures directly to `FR-012 Evaluation Harness`, preventing partial evidence runs from marking the evaluation requirement complete.
+- Completion audit final `passed` status now requires both the integrated evidence gate and every mapped PRD/NFR requirement to pass; incomplete requirements are listed under `requirement_completion_incomplete`.
+- Web readiness payloads now include `readiness_gate` and `prd_evaluation_gate`, and Monitoring displays POC/Pilot gate status plus live-check/evaluation-not-run actions so profile readiness cannot look complete without required live checks and full PRD evaluation evidence.
+- Web PRD evaluation gate payloads now include a `coverage_gate` with PRD case-count thresholds, and Monitoring surfaces `prd_evaluation_coverage_failed` actions if the evaluation set regresses below required coverage.
+- Evidence pack now writes a dedicated `prd_traceability.json` matrix, marks checks skipped by the current evidence run as `not_run`, and surfaces profile-required live LLM/embedding checks as next actions when evidence is generated without `--live-checks`.
+- Evidence pack manifest and README now include a PRD evaluation gate with threshold targets and failures, so partial runs such as blocked-only safety evidence cannot be mistaken for full PRD evaluation success.
+- Evidence pack PRD evaluation gate metrics now include coverage counts (`total_cases`, core/non-blocked/blocked totals, and `gold_compared_total`) alongside success rates, so threshold failures have matching measured evidence.
+- Evaluation reports record per-case workflow latency plus max/average latency summary fields, so the PRD response-time target is auditable from the report.
+- Evaluation reports include gold comparison metrics and per-case difference evidence: generated SQL, gold SQL, actual/gold columns, row-count delta, row samples, and the first mismatch.
+- Evaluation reports include PRD case metadata (`question`, `intent`, `required_tables`, `expected_metric`, `expected_sql_pattern`, `expected_result_shape`, `should_block`, and `notes`) plus the same expected metadata on each result row.
+- Evaluation CLI supports `--strict-prd`, which fails unless core demo success is 100%, non-blocked execution success is at least 70%, blocked-query rejection is 100%, and all evaluated cases meet the 10-second latency target.
+- Strict PRD evaluation now also requires full coverage thresholds before success rates are trusted: at least 30 total cases, 5 core demo cases, 30 non-blocked cases, 2 blocked safety cases, and 30 gold-compared cases.
+- Verified question manifest generation is available through `python -m im_one_agent.evaluate --verified-output ...` and `/api/verified-questions`.
+- Verified question manifest separates executable gold-SQL questions from blocked safety cases for analyst review and regression management.
+- Verified question manifest expands each gold-SQL case into source/table/report/criteria question variants, keeping the pilot verified question bank above 100 entries.
+- Blocked evaluation cases pass without an LLM endpoint because unsafe intent is detected before SQL generation.
+- Evaluation cases include expected result shapes and selected SQL fragment checks.
+- Non-blocked evaluation cases have executable gold SQL and full row-value gold snapshots from the fixed-seed synthetic mart; `gold_coverage` preflight executes every non-blocked gold SQL and verifies each expected result shape.
+- CLI entry point for evaluation: `python -m im_one_agent.evaluate`.
+- Evaluation summary API is available at `/api/evaluation-summary`, exposing total case count, blocked/follow-up/ambiguous/core coverage, gold SQL coverage, group/intent/metric/table distribution, and case metadata without requiring a live LLM run.
+- Readiness API is available at `/api/readiness`, returning the structured preflight report, profile application status, live-check request status, failed gate names, and next actions behind the protected API gate.
+- Audit events are written to JSONL and to the SQLite `query_audit_log` table.
+- JSONL audit events record SQLite database-audit status and error details when the database audit insert is skipped or fails.
+- SQLite `query_audit_log` is append-only at the database level: UPDATE and DELETE are blocked by triggers.
+- Audit events include `user_id` and `auth_mode`, so upstream-authenticated users can be traced when trusted header auth is enabled.
+- JSONL audit events now include PRD-named fields: `timestamp`, `original_question`, `selected_semantic_metrics`, `generated_sql`, `validation_status`, `execution_status`, `row_count`, and `blocked_reason`.
+- JSONL and SQLite audit events now separate raw LLM SQL (`llm_generated_sql`/`generated_sql`), policy-applied SQL, validated SQL, and SQL policy transformations such as branch-scope injection.
+- JSONL audit events include observability metadata for `generation_engine`, `llm_model`, and `prompt_version`.
+- SQLite `query_audit_log` stores both compatibility fields (`question`, `semantic_metrics`) and PRD-named fields (`original_question`, `selected_semantic_metrics`), plus SQL lineage fields, `generation_engine`, `llm_model`, `prompt_version`, `validation_issues`, `referenced_tables`, `pre_execution_row_count`, `query_plan_summary`, and `execution_ms`.
+- Audit execution status distinguishes `executed`, validation/intent `blocked`, and SQL runtime `failed` states.
+- Audit execution status treats SQLite runtime errors and query timeout interruptions as `failed`, separate from validation/intent `blocked`.
+- Web/API responses include a structured `executionTrace` with Question Intake, Semantic Layer, Schema Retrieval, SQL Generation, SQL Validation, Query Execution, and Audit Log nodes.
+- Schema Retrieval trace metadata now includes metric selection reasons, table selection reasons, retrieval scores, and embedding source so selected schema context is explainable from the API response.
+- Web/API SQL Generation trace metadata includes generation engine, LLM model, prompt version, generation reason, assumptions, and generation errors.
+- Web/API SQL Generation and SQL Validation trace metadata expose raw LLM SQL, policy-applied SQL, policy transformations, and validated SQL separately.
+- Web/API responses expose LLM generation assumptions as a top-level `generationAssumptions` field, so downstream report/export consumers do not need to parse trace metadata.
+- Web/API responses expose query execution latency as a top-level `executionMs` field and inside Query Execution trace metadata.
+- Web/API Query Execution trace distinguishes validation-time skips from runtime failures such as SQLite execution errors or timeouts.
+- Web/API Audit Log trace distinguishes full audit recording from partial recording when JSONL succeeds but SQLite `query_audit_log` insertion fails.
+- Web/UI trace detail text exposes semantic confidence and SQL generation engine/model/prompt version directly in the rendered trace rows.
+- Web/UI Query Execution trace detail also shows the first query plan step when a validated SQL query is executed.
+- Web UI topbar status exposes the LangGraph runtime plus SQL generation engine/model, with prompt version available on hover for quick demo verification.
+- Web UI exposes compact role policy controls for `branch_manager`, `sales_planning`, and `compliance`, plus branch scope input for branch managers.
+- Web UI query requests use the selected role and branch scope instead of a hardcoded role.
+- Web UI schema panel updates from the retrieved table context returned by the latest agent response.
+- Role-scoped semantic catalog API is available at `/api/catalog`, exposing allowed tables, semantic metric definitions, business rules, and role table policies for catalog review.
+- Catalog governance API is available at `/api/catalog-governance`, validating metric dictionary required fields, table references, related column references, role coverage, and issue counts for semantic-layer management.
+- Web UI context panel renders role-scoped Semantic metrics from the catalog endpoint and refreshes them when the selected role changes.
+- Workbench context panel static fallback exposes v2 mart schema entries for `investment_reviews` and `branch_targets`, plus semantic metric seeds for investment-review status and account-target comparison before the catalog API finishes loading.
+- Monitoring now includes a Catalog / Semantic Governance panel that reads `/api/catalog-governance` and shows visible metric count, visible table count, issue count, and governance status for data-catalog management visibility.
+- Monitoring now includes an Evaluation / Harness Coverage panel that reads `/api/evaluation-summary` and shows total cases, blocked cases, follow-up cases, and gold coverage for evaluation readiness visibility.
+- Monitoring now includes a Readiness / Preflight Gates panel that reads `/api/readiness` and shows pass status, required failures, optional failures, and next-action count.
+- Home screen renders 3-4 demo question chips from the server-provided demo question set and runs the selected question into the workbench flow.
+- Web UI home navigation is wired so the iM증권 logo returns to the home view and the workspace button returns to the workbench.
+- Home, workbench, and chat inputs all expose required-input validation so empty questions are not submitted silently.
+- Home, workbench, and chat question inputs enforce the same 1000-character question limit as the API before sending a request.
+- Responsive workbench layout includes tablet/mobile breakpoints, AI panel stacking, mobile rail hiding, tested dynamic result-grid sizing, sticky table headers, and internal table scrolling.
+- Query Execution trace metadata includes SQL execution time, row count, pre-execution row-count check, result columns, referenced tables, and a pre-execution SQLite query plan summary.
+- Query results now include column metadata with column name, ordinal position, and inferred value type in the workflow state, Web/API response, execution trace, and report draft.
+- Query results now include `queryPlan` in the Web/API response, execution trace metadata, and report draft export so long-running-query readiness can be reviewed before trusting the result.
+- Query results now include `preExecutionRowCount`, `preExecutionRowCountStatus`, and `preExecutionCheckMs` in the Web/API response, execution trace metadata, report draft export, JSONL audit event, and SQLite audit table.
+- Query execution is bounded by a SQLite progress-handler timeout using `IM_ONE_QUERY_TIMEOUT_MS`, defaulting to 10000 ms, and timeout interruptions are returned as blocked validation results.
+- Query execution now goes through a `QueryExecutionBackend` adapter. The current backend is SQLite, with `IM_ONE_DB_BACKEND` and preflight validation defining the replacement point for future DuckDB/Postgres/Snowflake-style adapters.
+- Multi-turn follow-up context is passed from Web UI/API to the LangGraph state and LLM prompt.
+- Follow-up questions merge previous allowed table/metric context into schema retrieval only when the previous execution was not blocked.
+- Generic follow-up questions prioritize the seeded previous metric context, while follow-ups with explicit business keywords such as VOC can add the current metric context on top.
+- User-supplied conversation context is sanitized before session merge and again before LLM payload construction; the LLM payload keeps bounded follow-up metadata such as previous question, SQL, columns, metrics, tables, row count, and validation status, while row sample values remain out of the model request.
+- Server-side session memory stores the latest conversation context and result by `sessionId`.
+- Server-side session memory is bounded by `IM_ONE_MAX_SESSIONS` and evicts the oldest sessions when the limit is exceeded.
+- Web API session IDs are constrained to short URL-safe tokens before being used as server-side memory keys.
+- Web API query payload parsing is centralized and validates non-empty questions, a 1000-character question limit, numeric branch IDs, normalized session IDs, and sanitized session-context merging before agent execution.
+- LangGraph Question Intake now normalizes question text, user role, branch scope, user id, and auth mode before schema retrieval, SQL generation, validation, and audit logging.
+- Web API JSON request body reading is centralized and enforces a configurable 64 KB default body-size limit across query, export, and feedback POST endpoints before parsing or agent execution.
+- CLI question intake uses the same shared non-empty and 1000-character validation as the Web/API path before invoking the LangGraph agent.
+- CLI runs print the blocked answer but exit with code 2 when the failure is an LLM generation/configuration failure, so demo automation can distinguish setup failures from normal unsafe-request blocking.
+- Result export endpoints generate CSV files and Markdown report drafts from the latest session result.
+- Result export API accepts only `csv` and `report` export types, rejecting unsupported payload values before file generation.
+- CSV result exports neutralize spreadsheet formula-like headers and string values before writing files, reducing report-export injection risk.
+- Markdown report drafts include generation engine/model/prompt metadata, generation assumptions, semantic metrics, referenced schema, validation evidence, execution trace, SQL, result preview, and synthetic-data caution text.
+- Markdown report result previews escape table cell pipes and line breaks so exported report tables remain structurally valid.
+- Feedback API is available at `/api/feedback`, is wired into the Workbench AI panel, and writes semantic-layer improvement events to `logs/feedback.jsonl` or `IM_ONE_FEEDBACK_PATH`.
+- Feedback backlog events normalize rating/category to approved values and bound comments to a 1000-character limit before persistence and summary grouping.
+- Feedback summary API is available at `/api/feedback-summary` for authorized semantic-layer backlog review, grouped by rating, category, metric, table, and role, with prioritized semantic backlog items and suggested remediation actions.
+- Optional API token protection is available for query, export, and metrics endpoints.
+- Public and protected Web API path groups are explicit in the server, with query/export/feedback POST endpoints and metrics/catalog/verified-question/audit/feedback-summary GET endpoints routed through the shared authorization gate.
+- Web responses include baseline security headers, including a same-origin Content Security Policy, `X-Content-Type-Options: nosniff`, no-referrer policy, and restricted browser permissions.
+- Trusted header auth mode is available for internal SSO/API-gateway integration via `IM_ONE_AUTH_MODE=trusted_headers`, `X-IM-One-User`, `X-IM-One-Role`, and `X-IM-One-Branch-ID`.
+- Trusted header auth can require an API-gateway shared secret through `IM_ONE_TRUSTED_PROXY_TOKEN` and `X-IM-One-Trusted-Proxy-Token`, preventing direct header spoofing in pilot deployment.
+- Trusted header user IDs are constrained to a short safe identifier format before authorization, session ownership, and audit logging.
+- API bearer tokens, `X-IM-One-Token`, and trusted proxy tokens are compared with constant-time token comparison.
+- Result export and feedback attachment enforce session-result access checks, so trusted-header users can only export or attach feedback to results created under the same authenticated user, role, and branch scope.
+- Feedback submission now requires an existing accessible session result, preventing backlog events without question, SQL, metric, and table context.
+- Health and runtime metrics endpoints are available for operational monitoring.
+- Public health responses expose only minimal readiness status; authenticated health checks can include database path, model, and base URL details for LLM and embedding runtime diagnostics.
+- Health endpoint reports LLM and embedding configuration status and auth mode, including explicitly enabled localhost no-auth runtimes while keeping remote no-auth endpoints unconfigured.
+- Audit summary API is available at `/api/audit-summary` for authorized admin monitoring, grouped by validation status, execution status, role, generation engine, model, semantic metric, referenced table, and blocked reason.
+- Audit summary uses SQLite `query_audit_log` as the primary operational source when the audit table is available, with JSONL audit events retained as fallback.
+- Web UI includes a Monitoring view wired from the left rail, showing runtime metrics, audit execution summary, prioritized semantic backlog items, and verified-question bank counts from protected admin APIs.
+- Web UI includes a Catalog management view wired from the left rail, showing role-scoped semantic metrics, allowed schema tables, role coverage, and governance issues from protected catalog APIs.
+- SQLite execution backend applies a DB-level authorizer with the role-selected allowed table set, so a query that bypasses validation state cannot read tables outside the retrieved schema context.
+- `IM_ONE_DB_READONLY=1` opens SQLite databases in read-only mode for read-replica style execution.
+- In read-only DB mode, query execution still runs against the replica, JSONL audit remains recorded, and SQLite `query_audit_log` insertion is skipped with `database_audit_status=skipped_read_only`.
+- Demo database initialization is guarded by a process thread lock, file lock, SQLite write transaction, and schema/data readiness checks, so concurrent first-time setup does not corrupt the database.
+- Demo database readiness checks validate required table columns, including audit observability columns and SQLite audit trace fields, before reusing an existing SQLite file.
+- Operational preflight checks validate database access, SQL validation policy probes, synthetic data policy, synthetic dataset metadata, query timeout, static UI assets/security posture, Web API authorization policy, health disclosure policy, read-only query/audit behavior, LLM/API-token/trusted-auth/trusted-proxy-token/embedding configuration, feedback backlog store readiness, and executable evaluation gold coverage.
+- Operational preflight validates required role policies, fails if business roles expose operational-only tables such as `query_audit_log`, and verifies the execution backend blocks out-of-role table access at the DB authorizer boundary.
+- Operational preflight validates that `query_audit_log` has append-only UPDATE/DELETE trigger enforcement before pilot use.
+- Operational preflight validates the LLM timeout budget and fails required readiness when `IM_ONE_LLM_TIMEOUT` is invalid, disabled, or above 10 seconds.
+- Operational preflight validates 19 representative SQL safety probes with a real demo DB connection, covering read-only enforcement, multi-statement and comment blocking, PRAGMA/unsafe commands, `SELECT *`, unknown tables, unknown columns, syntax errors, operational tables, `LIMIT > 100`, recursive CTEs, set operations, dangerous SQLite functions, cartesian joins, excessive offsets, random ordering, raw event detail, and branch-scope enforcement.
+- Operational preflight validates schema retrieval policy for representative questions, role-based table exclusion, ambiguous-question clarification, retrieval scoring, embedding-source metadata, and follow-up context merging.
+- Operational preflight validates result explanation policy for both allowed and blocked responses, including question interpretation, metric definitions, period/grouping/filter criteria, schema references, SQL referenced tables, assumptions, validation evidence, row count, and synthetic-data caution.
+- Operational preflight validates the execution-trace and audit-log contract by running a blocked workflow and checking required trace nodes, JSONL audit fields, and SQLite `query_audit_log` persistence when not in read-only mode.
+- Operational preflight validates the LLM prompt payload contract, including deterministic parameters, JSON response format, selected schema, role policy, semantic metric definitions, dataset metadata, SQL rules, and sanitized follow-up context.
+- Operational preflight validates core demo gold-SQL query latency against the PRD 1-second demo dataset query target.
+- Synthetic data policy preflight blocks sensitive business-table column names, sensitive column-name patterns such as `phone_no`, `employee_no`, `rrn_hash`, and `email_address`, plus email, phone, resident-registration-number, or account-number value patterns in the demo mart.
+- Synthetic data policy preflight requires every demo branch name to include an explicit `합성` marker, preventing branch-level results from looking like real iM증권 branch performance.
+- Synthetic dataset metadata preflight requires `demo_dataset_metadata` to identify the mart as synthetic POC data generated from the fixed-seed generator, with explicit false flags for real customer, account-number, employee, and branch-performance content.
+- Operational preflight supports grouped readiness profiles: `--profile poc` for live five-question LLM demo validation and `--profile pilot` for the same LLM gate plus API-token, trusted-auth with trusted proxy token, read-only, SQL parser, embedding, live embedding generation validation, remote embedding use in schema-retrieval scoring, and feedback-store readiness.
+- Operational preflight can emit a structured JSON readiness report with profile, db path, pass/fail summary, required-failure names, optional-failure names, and per-check evidence through `--json` and `--output`.
+- Operational preflight JSON reports include per-failed-check `next_actions`, making missing LLM, embedding, parser, auth, read-only, and feedback readiness steps machine-readable for demo/pilot gates.
+- Operational preflight `--check-llm` calls the configured LLM gateway for the five core demo questions and only passes if each generated result comes from the LLM engine with the current prompt version, completes within the PRD 10-second LLM workflow target, uses the required core tables, returns the expected result-shape columns, passes schema/RBAC/SQL safety validation, and executes with result rows.
+- Operational preflight validates a PRD traceability matrix covering FR-001 through FR-012 plus nonfunctional security, data ethics, performance, and observability evidence, including PRD heading presence and implementation/test artifact existence.
+- Operational preflight also validates the installed LangGraph runtime and requires `sqlglot` parser availability as a standard readiness gate.
+- Operational preflight validates the Web UI static asset contract, including local app/style/icon references, local lucide-compatible icon coverage, and same-origin-only CSP directives.
+- Operational preflight validates that the static Web UI includes visible generation, validation, row/table, execution-trace, catalog-management, and monitoring status hooks and that `app.js` renders LLM generation, catalog governance, and admin summary state from API responses.
+- Operational preflight validates the PRD Workbench layout contract, including home-to-workbench question flow, SQL/result/chat selectors, dynamic result-grid height, compact chat input sizing, sticky/scrollable result table styling, and tablet/mobile responsive breakpoints.
+- Operational preflight validates that public GET paths and protected GET/POST paths are explicitly separated, with monitoring, catalog, verified-question, query, export, and feedback endpoints covered by the protected path policy.
+- Operational preflight validates that unauthenticated health payloads do not expose database paths, model names, or endpoint base URLs, while authenticated health payloads retain those diagnostics.
+- Operational preflight validates evaluation readiness, including the 30+ case minimum, blocked-query coverage, follow-up coverage, required case metadata, 100+ verified question variants, and blocked safety cases.
+- Operational preflight validates PRD wording policy so internal implementation caveats stay out of `docs/prd.md`.
+- Web UI trace no longer displays deterministic/fallback wording.
+- Web UI icon rendering no longer depends on an external CDN; the used icon set is bundled in local static assets for offline/internal-network demos.
+- Web UI result-grid height calculation is factored into a local `layout.js` helper and tested against tall-table, short-table, and small-viewport cases so the SQL area keeps space while the result table fits the lower pane.
+- README aligned with LLM-gated execution behavior.
+- Demo script and POC brief are updated to reflect the current Web UI flow, role/RBAC behavior, clarification chips, report export, feedback/monitoring endpoints, preflight profiles, and verified question bank.
+
+## Verified
+
+- `.venv/bin/python -m pytest -q`: 241 passed, 1 skipped.
+- Evidence pack check confirmed `completion_audit.json` is generated, maps 16 PRD/NFR requirements, records per-requirement status, and lists blocking conditions for missing approved LLM evidence and incomplete full PRD evaluation evidence.
+- Evidence pack check confirmed partial blocked-only evaluation marks `FR-012 Evaluation Harness` as failed through the attached `prd_evaluation_gate` evidence instead of treating preflight coverage alone as completion.
+- Evidence pack check confirmed `completion_audit.json` final status remains failed when mapped requirements are incomplete, with `requirement_completion_incomplete` listing `FR-004` and `FR-012`.
+- Evidence pack check confirmed `manifest.json` and `README.md` include readiness next actions for failed required gates such as `llm_configuration`.
+- Evidence pack check confirmed `external_readiness.json`, `manifest.json`, and review README expose missing external evidence such as `approved_llm_gateway`, including required environment keys and verification commands.
+- Evidence pack check confirmed `prd_traceability.json` includes FR/NFR mappings, marks disabled live checks as `not_run`, and adds `llm_generation` next-action guidance.
+- Evidence pack check confirmed blocked-only evidence reports the PRD evaluation gate as failed for missing core/non-blocked coverage instead of presenting the safety subset as a complete pass.
+- Evidence pack check confirmed `prd_evaluation_gate.metrics` now records measured coverage counts such as `total_cases=7`, `core_demo_total=0`, `non_blocked_total=0`, `blocked_total=7`, and `gold_compared_total=0` for partial blocked-only evidence.
+- Evidence pack check confirmed `audit_log.jsonl` is included in the review bundle and contains PRD audit fields for blocked safety queries.
+- Evidence pack check confirmed manifest and review README summarize `audit_log.jsonl` with source path and event count.
+- Evidence pack check confirmed `audit_summary.json` is included in the review bundle and reports 7 blocked safety audit events grouped by execution and validation status.
+- Evidence pack check confirmed `database_audit_log.json` is included in the review bundle and snapshots 7 SQLite `query_audit_log` events with PRD audit fields.
+- Evidence pack check confirmed `sql_validation_probes.json` is included in the review bundle and records all 19 SQL validation probes passing.
+- Evidence pack check confirmed `sql_validation_probes.json` includes expected/actual allow status and concrete validation issues for DML, multi-statement, comments, PRAGMA, `SELECT *`, unknown table/column, syntax, operational-table, large-limit, recursive CTE, set-operation, dangerous-function, cartesian-join, offset, random-order, raw-detail, and branch-scope probes.
+- Evidence pack check confirmed `schema_retrieval_probes.json` is included in the review bundle and records all 6 schema retrieval probes passing.
+- `git diff --check`: passed.
+- Operational preflight passed against a fresh SQLite database path.
+- Operational preflight now reports `static_ui_assets` as a required passing check with local static files, bundled icons, and same-origin CSP evidence.
+- Operational preflight with `--require-feedback-store` passed when `IM_ONE_FEEDBACK_PATH` pointed to a writable path.
+- `.env.example` lists the POC/Pilot readiness environment keys for LLM, API-token protection, trusted-header gateway mode, read-only database mode, feedback store, and embedding configuration.
+- Operational preflight reports `langgraph_runtime` as `agent=CompiledStateGraph` and requires the current `sql_parser` gate to pass.
+- Required parser readiness now passes in the local `.venv` with `sqlglot` installed.
+- Pilot profile readiness with local environment variables confirmed read-only mode, API-token protection, trusted-header proxy token, feedback store, SQL parser, and static governance gates pass; only approved LLM and embedding endpoints remain external.
+- LangGraph runtime check confirmed `build_agent()` returns `CompiledStateGraph` with the required workflow nodes, including `question_intake`, in the project `.venv`.
+- Row-level event detail validation check confirmed `accounts` detail rows are blocked unless queried as aggregate/grouped results.
+- Mixed aggregate/detail validation check confirmed raw event columns cannot be selected alongside aggregates without `GROUP BY`.
+- SQL execution-plan validation check confirmed unknown columns and syntax errors are blocked before execution.
+- Cartesian join safety checks confirmed `CROSS JOIN`, tautological join predicates, and implicit comma joins are blocked before execution.
+- Recursive CTE safety check confirmed `WITH RECURSIVE` queries are blocked before execution.
+- Compound set-operation safety check confirmed `UNION`, `INTERSECT`, and `EXCEPT` queries are blocked before execution.
+- SQLite dangerous-function safety check confirmed `load_extension`, `readfile`, and `writefile` calls are blocked before execution.
+- SQL literal masking check confirmed forbidden keywords, set-operation words, dangerous function names, comments, semicolons, and table-like text inside string values do not trigger policy false positives.
+- Excessive query-shape safety checks confirmed `LIMIT 0`, large `OFFSET`, and `ORDER BY RANDOM()` are blocked before execution.
+- Top-level limit check confirmed CTE-internal `LIMIT` clauses do not bypass the required final SELECT `LIMIT`.
+- SQL validation policy preflight check confirmed 19 guardrail probes pass with SQLite execution-plan validation, and simulated guardrail failures fail readiness.
+- Nested-subquery safety checks confirmed `FROM (SELECT ...)` and scalar subqueries are blocked, while named `WITH` CTEs remain allowed.
+- Operational-table safety check confirmed `query_audit_log` is blocked by SQL validation even if mistakenly provided as an allowed table.
+- Quoted identifier safety checks confirmed quoted operational and unknown table references are still blocked, while quoted allowed business tables remain valid.
+- Required SQL parser validation path is covered with a fake parser test and a missing-parser preflight failure test.
+- CLI without LLM configuration returns a blocked execution response with an LLM generation failure reason.
+- CLI generation-failure checks confirmed LLM setup failures print retry guidance and return a non-zero exit code, while intent-guard blocks remain normal blocked workflow results.
+- LLM failure response checks confirmed the LangGraph answer, Web/API response payload, and UI chat summary expose retry guidance instead of only showing the blocked reason.
+- Manual SQLite check confirmed the blocked CLI run was inserted into `query_audit_log`.
+- Manual preflight checks passed in local read/write mode and `IM_ONE_DB_READONLY=1` mode.
+- Read-only run-agent check confirmed validated SQL executes against a prebuilt read-only SQLite database, JSONL audit is written, SQLite audit-table insertion is skipped, and no DB audit rows are added.
+- Read-only preflight check now runs an agent-style validated query, verifies JSONL audit remains recorded with `database_audit_status=skipped_read_only`, and confirms SQLite `query_audit_log` row count does not change.
+- Parallel preflight runs against the same first-time SQLite path both passed after idempotent initialization hardening.
+- Blocked evaluation subset: 7/7 passed without LLM configuration.
+- Plain-language investment-advice safety checks confirmed buy/sell/product-recommendation questions such as "사도 돼?", "팔아야 할까?", and "포트폴리오 추천" are blocked before LLM generation.
+- Evaluation report check confirmed blocked-query rejection rate, response-latency metrics, and other PRD-facing summary metrics are written to JSON.
+- Evaluation report check confirmed non-blocked failures record gold SQL, gold columns, row-count deltas, actual samples, and first mismatch details.
+- Evaluation report check confirmed PRD case metadata and per-result expected metadata are written to JSON.
+- Evaluation threshold check confirmed PRD metric gates, including latency success rate, report failures below configured rates.
+- Strict PRD evaluation without LLM configuration fails as expected because non-blocked cases cannot execute.
+- Verified question manifest check confirmed the pilot bank exports 100+ executable verified question variants, covers every non-blocked evaluation source case, and includes 7 blocked safety cases.
+- Follow-up evaluation check confirmed all follow-up cases have seeded previous-result context with SQL, columns, referenced tables, and allowed validation state.
+- Follow-up retrieval check confirmed generic follow-ups keep the previous metric/table context instead of replacing it with unrelated low-confidence retrieval results.
+- API trace check confirmed all required trace nodes are returned, including skipped execution with row count 0 for blocked requests.
+- API/trace/report checks confirmed result column metadata is returned with rows and exposed through the Query Execution trace and report draft.
+- API/report checks confirmed LLM generation assumptions are exposed both in the structured response and report draft.
+- Query timeout check confirmed long-running SQLite execution is interrupted and reported as a validation failure.
+- Database backend policy check confirmed the default SQLite execution adapter is selected and unsupported backend names fail readiness instead of running against an undefined database layer.
+- Query timeout check confirmed runtime timeout interruptions are classified as `failed` execution status for audit semantics.
+- Runtime execution failure audit check confirmed LangGraph writes `failed` execution status, blocked validation status, pre-execution row-count evidence, query plan summary, and blocked reason to both JSONL and SQLite `query_audit_log`.
+- Web/API trace check confirmed runtime execution failures are shown as Query Execution `failed`, not as validation-time `skipped`.
+- API/UI trace check confirmed semantic confidence and SQL generation model/prompt version are visible in trace detail text.
+- API/UI trace check confirmed Schema Retrieval exposes selection reasons, score components, and embedding source in structured metadata.
+- Web UI static check confirmed role policy controls, branch scope input, selected-role query payload, and dynamic schema rendering are wired.
+- Catalog API/UI check confirmed role-scoped metric definitions are exposed and compliance users do not receive disallowed account/target metrics.
+- Web UI static check confirmed home example-question chips are rendered and wired to the workbench execution flow.
+- Web UI static/layout checks confirmed home/workspace navigation, responsive breakpoints, tested dynamic result-grid sizing, sticky table header, table min-width, and contained result-table overflow are wired.
+- Web UI static check confirmed no external icon CDN is referenced and every `data-lucide` icon used by the page is covered by the local icon bundle.
+- Web security header check confirmed CSP allows only same-origin scripts/styles/connect targets, blocks framing, and avoids external CDN allowances.
+- Web handler authorization checks confirmed protected GET/POST API paths return 401 before serving monitoring data or reading protected request bodies, while health and demo-question endpoints remain public.
+- Web API authorization policy preflight check confirmed required protected path sets pass and missing/overlapping policies fail readiness.
+- Health disclosure checks confirmed public health responses redact database path, model, and base URL fields, while authorized health and strict preflight retain detailed diagnostics.
+- Web UI static check confirmed home, workbench, and chat question inputs expose required state and call native validity reporting for empty submissions.
+- Web UI static check confirmed all three question inputs expose the API-aligned 1000-character limit and submit paths call shared client-side validation.
+- Web UI static check confirmed the topbar generation label, validation metric, row/table metrics, and execution trace hooks are present and wired to response fields.
+- Web UI static check confirmed the Monitoring view is wired to runtime metrics, feedback summary, audit summary, and verified-question protected endpoints.
+- RBAC role normalization check confirmed unknown roles fall back to `branch_manager` and still enforce branch scope.
+- Branch scope application check confirmed unscoped simple `branch_manager` SQL is rewritten with `branch_id = 1` before execution.
+- Branch scope application check confirmed string literal values containing clause keywords or nested-select-like text do not affect where the server-side branch predicate is injected.
+- Branch scope safety checks confirmed `OR` and nested SELECT queries are not rewritten and remain subject to validation blocking.
+- Branch target scope checks confirmed target-vs-actual SQL is branch-scoped for `branch_manager` and disconnected `branch_targets` joins are blocked.
+- Branch scope normalization check confirmed out-of-range branch IDs fall back to the default demo branch before generation and API response.
+- RBAC full-graph check confirmed a `compliance` workflow blocks LLM-generated SQL that references disallowed `accounts` and `branch_targets`, and records the blocked event in both JSONL and SQLite audit logs.
+- RBAC retrieval check confirmed disallowed account/target metrics are not passed into compliance role schema context.
+- Schema retrieval policy preflight check confirmed high-confidence questions select only relevant role-allowed tables, ambiguous questions expose clarification options, and follow-up questions merge previous/current schema context.
+- Role-policy preflight check confirmed required roles are present and operational-only audit tables cannot be exposed through role policy.
+- JSONL audit check confirmed PRD-required audit fields and blocked reason are recorded for unsafe requests.
+- JSONL audit check confirmed SQLite database-audit insertion failures are recorded with status and error details instead of being silently ignored.
+- Trusted-header auth check confirmed header-provided user, role, and branch scope override client payload values and are persisted to audit.
+- Trusted-header proxy-token check confirmed direct user header spoofing is rejected when `IM_ONE_TRUSTED_PROXY_TOKEN` is configured.
+- Token authorization checks confirmed API tokens and trusted proxy tokens use constant-time comparison.
+- Health payload check confirmed local LLM/embedding runtimes are reported as configured only for explicitly enabled localhost no-auth endpoints, while remote no-auth endpoints remain unconfigured.
+- Session-result access check confirmed trusted-header users cannot export or attach feedback to another authenticated user's result session.
+- Feedback session checks confirmed missing result sessions are rejected and unauthorized users cannot attach feedback to another user's result.
+- Pilot preflight profile check confirmed `IM_ONE_TRUSTED_PROXY_TOKEN` is a required readiness condition for trusted-header deployment.
+- Pilot preflight profile check confirmed live LLM and embedding endpoint checks are required and fail locally when approved credentials/models are not configured.
+- JSONL audit and Web trace checks confirmed prompt version and model metadata are recorded.
+- Web trace check confirmed SQLite database-audit failures are surfaced as partial Audit Log trace status.
+- SQLite audit-table check confirmed PRD-named fields, prompt version, model metadata, validation issues, referenced tables, pre-execution row-count evidence, query plan summary, and execution latency are persisted in `query_audit_log`.
+- SQLite audit append-only check confirmed UPDATE and DELETE against `query_audit_log` are rejected by database triggers.
+- Audit append-only preflight check confirmed required trigger names and abort semantics are inspected as a required readiness gate.
+- Trace/audit policy preflight check confirmed required LangGraph/Web trace nodes and PRD audit fields are preserved for blocked workflows.
+- Semantic layer check confirmed metric definitions, date criteria, and join paths are available to retrieval, LLM prompts, and explanations.
+- Result explanation check confirmed aggregation and filter criteria are displayed from semantic metric definitions.
+- Result explanation check confirmed concrete validation evidence is shown, including read-only query policy, table whitelist, query-shape, row-level detail, and role-scope checks.
+- Result explanation policy preflight check confirmed allowed and blocked explanations keep the PRD-required explanation fields and synthetic-data caution.
+- Ambiguous-question check confirmed low-confidence retrieval returns clarification options, while risky-product synonyms map to high-risk product sales with high confidence.
+- Ambiguous-question workflow check confirmed low-confidence questions add a visible generation assumption with confirmation guidance before returning results.
+- Web UI static check confirmed clarification option chips are wired to rerun the selected follow-up question.
+- Remote embedding provider path is covered with a fake endpoint test, localhost no-auth embedding is allowed only when explicitly enabled, remote no-auth embedding endpoints remain blocked, and preflight reports embedding configuration readiness.
+- Embedding generation preflight check confirmed live pilot readiness requires a minimum usable remote vector and verifies that schema-retrieval scoring is actually using remote embeddings instead of local fallback scoring.
+- LLM payload check confirmed semantic-priority, aggregate-first, raw-detail avoidance, and set-operation avoidance rules are present in the system prompt.
+- LLM payload check confirmed role policy, selected schema, synthetic dataset metadata, operational table exclusions, and SQL rules are serialized into the model request.
+- LLM payload check confirmed deterministic generation parameters and JSON-object response formatting are sent to the configured endpoint.
+- LLM prompt policy preflight check confirmed the same payload contract is enforced as a required readiness gate without needing a live LLM endpoint.
+- Local LLM runtime check confirmed localhost OpenAI-compatible endpoints can be called without an authorization header only when explicitly enabled, while remote no-auth endpoints remain blocked.
+- LLM gateway preflight tests confirmed the five core demo questions must come from the LLM engine with the current prompt version, generate SQL within the 10-second workflow target, reference required tables, return expected result-shape columns, validate, and execute with rows, while unsafe generated SQL fails readiness.
+- OpenAI-compatible endpoint payload and response parsing are covered by monkeypatch tests; the local HTTP server integration test is skipped in this sandbox because localhost socket binding is not permitted.
+- LLM response-shape check confirmed missing required JSON keys prevent SQL execution.
+- LLM response-shape check confirmed assumptions arrays with non-string items are rejected before SQL execution.
+- LLM timeout checks confirmed the default is 10 seconds and preflight blocks invalid or above-target timeout settings.
+- Result explanation check confirmed synthetic-data POC caution and no-matching-data handling are shown.
+- Web/report export check confirmed empty results use the no-matching-data wording.
+- Report draft check confirmed semantic metrics, referenced schema, validation evidence, execution trace, model metadata, SQL, result preview, and synthetic-data caution text are included.
+- Report draft table check confirmed pipe characters and line breaks in result values are escaped before Markdown export.
+- CSV export checks confirmed comma quoting plus formula-like header/value neutralization while preserving numeric values.
+- Export payload check confirmed only `csv` and `report` export types are accepted by the API contract.
+- Feedback UI/static check and event check confirmed users can submit result feedback from the AI panel, and user identity, session question, SQL, semantic metrics, referenced tables, rating, category, and comment are persisted for semantic-layer backlog review.
+- Feedback sanitization checks confirmed untrusted rating/category values are normalized and comments are bounded before backlog persistence.
+- Feedback summary check confirmed JSONL feedback events are grouped by rating, category, semantic metric, referenced table, and role, with prioritized semantic backlog items and suggested actions exposed for review.
+- Static UI check confirmed Monitoring fetches role-scoped catalog governance and renders Catalog Governance alongside runtime, audit, feedback, and verified-question panels.
+- Static UI check confirmed the home button/input flow, responsive workbench breakpoints, compact chat input, sticky table header, and bottom-safe internal result scrolling are enforced by preflight.
+- Static UI check confirmed the Workbench context panel fallback includes v2 mart schema and semantic metric entries for data-catalog review.
+- Catalog governance check confirmed semantic metrics have required definitions, table references, related columns, grouping, date criteria, join paths, and sample questions, with role coverage exposed for compliance and planning review.
+- Evaluation summary check confirmed at least 30 evaluation cases, 5 core demo cases, blocked safety cases, 5 follow-up cases, and full gold SQL coverage are exposed for monitoring.
+- Readiness payload check confirmed Monitoring shows local, POC, and Pilot readiness summaries while keeping live LLM and embedding checks opt-in through `live=true`.
+- Readiness payload check confirmed POC/Pilot `prd_evaluation_gate.coverage_gate` exposes total/core/non-blocked/blocked/gold-compared case counts and thresholds for Monitoring.
+- Readiness Monitoring now lists required POC/Pilot failed gates with their preflight details and next-action guidance instead of exposing only aggregate counts.
+- Feedback store preflight check confirmed writable stores pass strict readiness and unwritable stores fail only when `--require-feedback-store` is enabled.
+- Audit summary check confirmed JSONL audit events are grouped by execution/validation status, role, generation engine, model, semantic metric, referenced table, and blocked reason, with recent monitoring events exposed for review.
+- Audit summary check confirmed SQLite `query_audit_log` is preferred over JSONL fallback when database audit rows are available.
+- Session store bound check confirmed the oldest sessions are evicted after `MAX_SESSIONS`.
+- Query payload checks confirmed empty/overlong questions and non-numeric branch scopes are rejected before agent execution, while stored session context is merged with payload follow-up context.
+- JSON body reader checks confirmed oversized API payloads are rejected before parsing and non-object JSON bodies do not reach the agent, export, or feedback handlers.
+- CLI intake checks confirmed empty and overlong `--question` values stop before agent execution, while valid questions are trimmed before invoking the workflow.
+- Conversation-context sanitizer checks confirmed unexpected prompt-injection fields are dropped, stored row samples/string fields are bounded, and row sample values are excluded from the LLM payload.
+- Preflight profile check confirmed `poc` and `pilot` grouped readiness requirements are applied consistently, including live five-question LLM checks for POC and live embedding checks for the pilot profile.
+- POC profile preflight without an approved LLM key now fails explicitly through `llm_configuration` and five-question `llm_generation`, matching the PRD requirement that the demo prove live LLM SQL generation.
+- Preflight report check confirmed required and optional failures are summarized in a JSON report suitable for demo/pilot readiness evidence.
+- Preflight report check confirmed failed readiness checks include structured next-action guidance for required and optional failures.
+- Readiness API check confirmed the same preflight report is available to the protected Web UI with profile validation for `poc` and `pilot`.
+- PRD traceability preflight check confirmed all 12 functional requirements have implementation artifacts, verification artifacts, linked readiness gates, matching PRD headings, and existing evidence files.
+- Preflight demo query latency check confirmed the five core demo gold SQL queries run under the PRD 1-second target.
+- Query plan preflight check confirmed validated SQL captures pre-execution query plan evidence, pre-execution row-count evidence, column metadata, and execution timing.
+- Health payload check confirmed the active database execution backend is reported without exposing database paths in public health responses.
+- Trusted-header auth check confirmed malformed or overlong upstream user IDs are rejected before authorization and audit/session ownership.
+- Evaluation readiness preflight check confirmed evaluation case coverage, metadata completeness, verified question bank size, source-case coverage, and blocked safety cases.
+- Strict PRD coverage check confirmed focused partial runs such as core-only or blocked-only evidence fail the PRD evaluation gate before success rates can be treated as complete evidence.
+- Gold coverage preflight check confirmed all 33 non-blocked evaluation gold SQL queries execute against the fixed-seed mart, return rows, and include expected result-shape columns; the check also catches missing columns and SQL execution errors.
+- Execution boundary check confirmed a validation-state bypass attempt against `accounts` is blocked by the SQLite DB authorizer when the active schema context allows only `branches`.
+- PRD wording policy check confirmed `docs/prd.md` has no internal implementation-caveat wording.
+- Documentation check confirmed demo script and POC brief include the current LLM, validation, trace, report, feedback, preflight, and verified-question story.
+- Parallel demo database initialization test passed after lock hardening.
+- Demo data generator check confirmed SQLite creation, CSV snapshot export, and evaluation gold snapshot export.
+- Demo dataset metadata check confirmed the SQLite mart and CSV snapshots carry synthetic POC classification, fixed-seed source, AS_OF_DATE, and explicit no-real-data flags.
+- Demo data generator CSV snapshot check confirmed formula-like string values are neutralized before files are written.
+- Synthetic data policy check confirmed the generated demo mart passes and injected sensitive columns, sensitive column-name patterns, and phone values are blocked.
+- Synthetic data policy check confirmed realistic-looking branch names without the `합성` marker are blocked before demo/pilot evidence generation.
+
+## Remaining PRD Gaps
+
+- Real LLM endpoint has not been exercised in this environment because no approved key/endpoint is configured; `--profile poc` and `--profile pilot` now fail this explicitly through `llm_configuration` and five-question `llm_generation`.
+- Evaluation runner exists, but non-blocked evaluation cases require a configured LLM to produce pass/fail evidence.
+- Remote embedding retrieval is implemented, but no approved embedding endpoint/model is configured in this local environment; `--profile pilot` now fails this explicitly through `embedding_configuration` and `embedding_generation`.
+- Production integrations still require real internal SSO rollout and a real company read replica in the target environment, plus approved LLM and embedding gateway execution. The POC now includes trusted-header auth mode, optional API-token protection, read-only DB mode, health checks, metrics, LLM/embedding validation preflight, and readiness checks.
